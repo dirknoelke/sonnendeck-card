@@ -486,13 +486,13 @@ const CAR_BODY_NOSE = 8;
  */
 const CAR_CAB = [
     [18, 34],
-    [30, 41],
-    [52, 50],
-    [80, 54],
-    [102, 50],
-    [124, 38],
-    [130, 34],
-    [130, 30],
+    [30, 43],
+    [52, 53],
+    [80, 58],
+    [104, 54],
+    [126, 40],
+    [133, 34],
+    [133, 30],
     [18, 30],
 ];
 /** indices 0..4 are the roof and the fastback, 4..6 the raked screen */
@@ -501,19 +501,19 @@ const CAR_CAB_SCREEN_FROM = 4;
 const CAR_CAB_SCREEN_TO = 7;
 /** the side glass, inset so the pillars stay body-coloured */
 const CAR_GLASS = [
-    [26, 37],
-    [36, 42.5],
-    [54, 49.5],
-    [80, 52],
-    [100, 48.5],
-    [120, 39],
-    [125, 37],
+    [25, 37],
+    [35, 44],
+    [54, 52.5],
+    [80, 56],
+    [102, 52],
+    [122, 40],
+    [128, 37],
 ];
 /** the glass roof */
 const CAR_ROOF_GLASS = [
-    [46, 48.5],
-    [80, 53],
-    [100, 50],
+    [40, 51],
+    [80, 57],
+    [106, 53],
 ];
 /** wheel centres along the car; the wheelbase is 104 */
 const CAR_WHEELS = [36, 140];
@@ -552,7 +552,7 @@ const parkingMarkup = () => {
     const tilt = ((Math.atan(K) * 180) / Math.PI).toFixed(1);
     const wheel = (x, y, r, cls) => {
         const c = p3(CAR.x + x, y, r);
-        const rim = r * 0.62;
+        const rim = r * 0.86;
         // five spokes, drawn in the wheel's own (already tilted) frame
         const spokes = Array.from({ length: 5 }, (_, k) => {
             const t = ((-90 + k * 72) * Math.PI) / 180;
@@ -561,8 +561,8 @@ const parkingMarkup = () => {
         return `<g class="${cls}" transform="translate(${fp(c)}) rotate(${tilt})">
       <ellipse rx="${r}" ry="${(r * 0.95).toFixed(1)}" fill="var(--ak-car-wheel)"/>
       <ellipse rx="${rim.toFixed(1)}" ry="${(rim * 0.95).toFixed(1)}" fill="var(--ak-car-rim)"/>
-      <path d="${spokes}" stroke="var(--ak-car-wheel)" stroke-width="${Math.max(2, r * 0.17).toFixed(1)}" stroke-linecap="round" fill="none"/>
-      <ellipse rx="${(r * 0.2).toFixed(1)}" ry="${(r * 0.19).toFixed(1)}" fill="var(--ak-car-wheel)"/>
+      <path d="${spokes}" stroke="var(--ak-car-slit)" stroke-width="${Math.max(1.6, r * 0.13).toFixed(1)}" stroke-linecap="round" fill="none"/>
+      <ellipse rx="${(r * 0.14).toFixed(1)}" ry="${(r * 0.13).toFixed(1)}" fill="var(--ak-car-slit)"/>
     </g>`;
     };
     /** the dark recess the wheel sits in, cut off at the sill */
@@ -576,7 +576,8 @@ const parkingMarkup = () => {
     const cabScreen = CAR_CAB.slice(CAR_CAB_SCREEN_FROM, CAR_CAB_SCREEN_TO);
     const bodySide = smoothPoly(CAR_BODY.map((p) => carSide(p, 1)), 6);
     /* a headlamp: a short strip near each corner of the nose, not a full bar */
-    const lamp = (side) => line([carSide([175, 19], side, 5), carSide([175, 19], side, 21)]);
+    const lampBar = line([carSide([175.5, 20], -1, 6), carSide([175.5, 20], 1, 6)]);
+    const lampCorner = line([carSide([174.5, 9], 1, 6), carSide([174.5, 17], 1, 6)]);
     return `
   <path class="bay" d="${bay}"/>
   ${groundShadow(CAR.x + 12, CAR.y + 4, CAR.dx - 24, CAR.dy - 8, 0.15)}
@@ -614,8 +615,8 @@ const parkingMarkup = () => {
     ])}"/>
     <g clip-path="url(#ak-car-clip)">${CAR_WHEELS.map((x) => arch(x, 13)).join('')}</g>
     ${CAR_WHEELS.map((x) => wheel(x, CAR_NEAR - carTaper(x) - 1, 13, 'wheel')).join('')}
-    <path class="car-light" d="${lamp(1)} ${lamp(-1)}"/>
-    <path class="car-tail" d="${line([carSide([3, 22], 1), carSide([16, 29], 1)])}"/>
+    <path class="car-light" d="${lampBar} ${lampCorner}"/>
+    <path class="car-tail" d="${line([carSide([2.5, 24], -1, 5), carSide([2.5, 24], 1, 5)])}"/>
   </g>
   <g class="wallbox" data-tap="ev">
     ${isoBox(HOUSE.L, WB.y, WB.h0, WB.d, WB.dy, WB.dh, 'var(--ak-meter)', 'var(--ak-meter-edge)', 'var(--ak-meter)')}
@@ -949,9 +950,9 @@ const STYLE = `
   --ak-case:#2b3d57; --ak-case-o:.20; --ak-flow-hi:#ffffff;
   --ak-bay:#dfe8f4; --ak-bay-line:#c3d3e6;
   --ak-car-shell:#dde6f1; --ak-car-nose:#b7c4d4; --ak-car-side:#a3b2c4;
-  --ak-car-far:#7c8b9e; --ak-car-glass:#2f3c4e; --ak-car-glass-2:#3b4a5e;
+  --ak-car-far:#7c8b9e; --ak-car-glass:#b3c3d6; --ak-car-glass-2:#d2deec;
   --ak-car-roof:#edf2f9; --ak-car-cab:#ccd7e4; --ak-car-trim:#ffffff;
-  --ak-car-wheel:#2b323c; --ak-car-rim:#b6c1cf;
+  --ak-car-wheel:#2b323c; --ak-car-rim:#b9c3d0; --ak-car-slit:#8d9aab;
   --ak-car-crease:#8a97a8; --ak-car-light:#7fe4ff; --ak-car-tail:#ff6470;
   --ak-car-side-hi:#c4d0df; --ak-car-arch:#232b36;
   --ak-mast:#b9cbe0; --ak-tree:#4e8570; --ak-trunk:#7b6350; --ak-bush:#69987e;
@@ -982,9 +983,9 @@ const STYLE = `
   --ak-case:#000000; --ak-case-o:.38; --ak-flow-hi:#ffffff;
   --ak-bay:#2a3646; --ak-bay-line:#3d4c60;
   --ak-car-shell:#98a4b3; --ak-car-nose:#74808f; --ak-car-side:#64707e;
-  --ak-car-far:#454e5b; --ak-car-glass:#1c2430; --ak-car-glass-2:#26313f;
+  --ak-car-far:#454e5b; --ak-car-glass:#46556c; --ak-car-glass-2:#5b6b84;
   --ak-car-roof:#a9b5c4; --ak-car-cab:#8794a4; --ak-car-trim:#c8d2de;
-  --ak-car-wheel:#161b22; --ak-car-rim:#6e7b8c;
+  --ak-car-wheel:#161b22; --ak-car-rim:#78859a; --ak-car-slit:#505c6d;
   --ak-car-crease:#4f5967; --ak-car-light:#8fe9ff; --ak-car-tail:#ff5f6b;
   --ak-car-side-hi:#8795a6; --ak-car-arch:#0d1117;
   --ak-mast:#5b7290; --ak-tree:#3a6558; --ak-trunk:#584739; --ak-bush:#4e7561;
@@ -1051,14 +1052,14 @@ text { fill:var(--ak-text); }
   stroke-linejoin:round; }
 .car-cab { fill:var(--ak-car-cab); }
 .car-glass { fill:var(--ak-car-glass); }
-.car-pillar { fill:none; stroke:var(--ak-car-cab); stroke-width:4.5; stroke-linecap:round; }
+.car-pillar { fill:none; stroke:var(--ak-car-cab); stroke-width:3; stroke-linecap:round; }
 .car-glass-top { fill:var(--ak-car-glass-2); }
 .car-trim { fill:none; stroke:var(--ak-car-trim); stroke-width:2;
   stroke-linecap:round; stroke-linejoin:round; opacity:.55; }
 .car-crease { fill:none; stroke:var(--ak-car-crease); stroke-width:2.5;
   stroke-linecap:round; stroke-linejoin:round; opacity:.55; }
-.car-light { stroke:var(--ak-car-light); stroke-width:5; stroke-linecap:round; }
-.car-tail { stroke:var(--ak-car-tail); stroke-width:4; stroke-linecap:round; opacity:.85; }
+.car-light { stroke:var(--ak-car-light); stroke-width:3; stroke-linecap:round; }
+.car-tail { stroke:var(--ak-car-tail); stroke-width:3; stroke-linecap:round; opacity:.85; }
 .wheel ellipse, .wheel-far ellipse { stroke:none; }
 .wheel-far { opacity:.75; }
 .wallbox.charging .wb-accent { stroke:var(--ak-accent); }
