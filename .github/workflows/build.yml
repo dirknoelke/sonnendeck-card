@@ -7,6 +7,11 @@ on:
   release:
     types: [published]
 
+# the release job attaches the built card to the release, which the default
+# read-only GITHUB_TOKEN is not allowed to do
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: ubuntu-latest
