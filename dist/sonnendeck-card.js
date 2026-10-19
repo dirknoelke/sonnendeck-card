@@ -289,7 +289,7 @@ const isoBox = (x, y, h, dx, dy, dh, top, front, side) => `<path d="${poly([p3(x
 const groundShadow = (x, y, dx, dy, o) => {
     const c = p3(x + dx / 2, y + dy / 2, 0);
     const r = (dx + dy) / 2 + 14;
-    return `<ellipse cx="${c[0].toFixed(1)}" cy="${c[1].toFixed(1)}" rx="${r.toFixed(1)}" ry="${(r * K * 0.95).toFixed(1)}" fill="var(--ak-shadow)" opacity="${o}"/>`;
+    return `<ellipse cx="${c[0].toFixed(1)}" cy="${c[1].toFixed(1)}" rx="${r.toFixed(1)}" ry="${(r * K * 0.95).toFixed(1)}" fill="var(--ak-shadow)" opacity="${o}" filter="url(#ak-soft)"/>`;
 };
 /** a closed polygon with rounded corners — used for the car's body */
 const smoothPoly = (pts, radius = 11) => {
@@ -361,6 +361,9 @@ const panelMarkup = (blocks) => {
             out += `<path class="pv-face" d="${poly([roofPt(ax, at), roofPt(bx, at), roofPt(bx, bt), roofPt(ax, bt)])}"/>`;
             out += `<path class="pv-grid" d="${line([roofPt(ax, (at + bt) / 2), roofPt(bx, (at + bt) / 2)])}"/>`;
             out += `<path class="pv-grid" d="${line([roofPt((ax + bx) / 2, at), roofPt((ax + bx) / 2, bt)])}"/>`;
+            // glass: a reflection across the upper-left corner, and a lit top edge
+            out += `<path class="pv-sheen" d="${poly([roofPt(ax, at), roofPt(bx, at), roofPt(ax, bt)])}"/>`;
+            out += `<path class="pv-edge" d="${line([roofPt(ax, at), roofPt(bx, at)])}"/>`;
             out += `</g>`;
         }
     }
@@ -385,7 +388,17 @@ const storageMarkup = (units, blocks) => {
         const dx = wide ? UNIT.dx + 22 : UNIT.dx;
         out += `<g class="unit" data-unit="${i}">`;
         out += groundShadow(x, unitY, dx, UNIT.dy, 0.13);
-        out += isoBox(x, unitY, 0, dx, UNIT.dy, UNIT.h, 'var(--ak-unit-top)', 'var(--ak-unit-front)', 'var(--ak-unit-side)');
+        out += isoBox(x, unitY, 0, dx, UNIT.dy, UNIT.h, 'url(#ak-u-top)', 'url(#ak-u-front)', 'url(#ak-u-side)');
+        // a lit edge along the top of the front face and a dark foot give the
+        // cabinet its volume — the same box, just read as a solid
+        out += `<path class="unit-rim" d="${line([
+            p3(x, unitY + UNIT.dy, UNIT.h),
+            p3(x + dx, unitY + UNIT.dy, UNIT.h),
+        ])}"/>`;
+        out += `<path class="unit-rim side" d="${line([
+            p3(x + dx, unitY + UNIT.dy, UNIT.h),
+            p3(x + dx, unitY, UNIT.h),
+        ])}"/>`;
         out += `<path class="unit-accent" d="${line([
             p3(x + 8, unitY + UNIT.dy, 14),
             p3(x + 8, unitY + UNIT.dy, UNIT.h - 22),
@@ -629,7 +642,14 @@ const flowGrid = (ev) => {
         p3(HOUSE.L, METER.y0 + 12, METER.h1 - 26), // in through the right edge
     ]);
 };
-const flowPath = (cls, key, d) => `<g data-flow="${key}"><path class="flow-base" pathLength="1000" d="${d}"/>` +
+/**
+ * A cable is four strokes on one path: a soft shadow beneath it, the cable
+ * itself, a thin highlight along its upper edge, and the travelling pulse.
+ * Thin and straight reads as a real conduit; the shadow lifts it off the wall.
+ */
+const flowPath = (cls, key, d) => `<g data-flow="${key}"><path class="flow-case" pathLength="1000" d="${d}"/>` +
+    `<path class="flow-base" pathLength="1000" d="${d}"/>` +
+    `<path class="flow-hi" pathLength="1000" d="${d}"/>` +
     `<path class="flow-dash ${cls}" pathLength="1000" d="${d}"/></g>`;
 /* ------------------------------ the scene ------------------------------ */
 const sceneMarkup = (blocks, units, ev, evOnDock) => {
@@ -662,10 +682,69 @@ const sceneMarkup = (blocks, units, ev, evOnDock) => {
       <stop offset="0" stop-color="var(--ak-ground-1)" stop-opacity=".85"/>
       <stop offset="1" stop-color="var(--ak-ground-2)" stop-opacity="0"/>
     </radialGradient>
+
+    <!-- soft edges: contact shadows and clouds -->
+    <filter id="ak-soft" x="-40%" y="-200%" width="180%" height="500%"><feGaussianBlur stdDeviation="7"/></filter>
+    <filter id="ak-soft-l" x="-30%" y="-30%" width="160%" height="160%"><feGaussianBlur stdDeviation="22"/></filter>
+    <filter id="ak-cloud" x="-30%" y="-80%" width="160%" height="260%"><feGaussianBlur stdDeviation="15"/></filter>
+    <filter id="ak-lift" x="-10%" y="-10%" width="120%" height="130%">
+      <feDropShadow dx="0" dy="4" stdDeviation="3" flood-color="var(--ak-shadow)" flood-opacity=".4"/>
+    </filter>
+
+    <!-- walls: shaded under the eave, darker where they meet the ground -->
+    <linearGradient id="ak-wall-shade" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="var(--ak-shadow)" stop-opacity=".30"/>
+      <stop offset=".16" stop-color="var(--ak-shadow)" stop-opacity=".08"/>
+      <stop offset=".34" stop-color="var(--ak-shadow)" stop-opacity="0"/>
+      <stop offset=".72" stop-color="var(--ak-shadow)" stop-opacity="0"/>
+      <stop offset="1" stop-color="var(--ak-shadow)" stop-opacity=".16"/>
+    </linearGradient>
+    <linearGradient id="ak-wall-side-shade" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="var(--ak-shadow)" stop-opacity=".12"/>
+      <stop offset="1" stop-color="var(--ak-shadow)" stop-opacity="0"/>
+    </linearGradient>
+
+    <!-- roof: a faint sheen sliding across it, brighter towards the ridge -->
+    <linearGradient id="ak-roof-sheen" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#fff" stop-opacity="0"/>
+      <stop offset=".55" stop-color="#fff" stop-opacity=".10"/>
+      <stop offset="1" stop-color="#fff" stop-opacity=".02"/>
+    </linearGradient>
+
+    <!-- storage cabinets: brushed light on top, falling off to the foot -->
+    <linearGradient id="ak-u-top" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="var(--ak-unit-top)"/>
+      <stop offset="1" stop-color="var(--ak-unit-front)"/>
+    </linearGradient>
+    <linearGradient id="ak-u-front" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="var(--ak-unit-front)"/>
+      <stop offset="1" stop-color="var(--ak-unit-front-lo)"/>
+    </linearGradient>
+    <linearGradient id="ak-u-side" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="var(--ak-unit-side)"/>
+      <stop offset="1" stop-color="var(--ak-unit-side-lo)"/>
+    </linearGradient>
+
+    <!-- lit windows -->
+    <linearGradient id="ak-lit" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="var(--ak-lit-1)"/>
+      <stop offset="1" stop-color="var(--ak-lit-2)"/>
+    </linearGradient>
+    <radialGradient id="ak-halo" cx=".5" cy=".5" r=".5">
+      <stop offset="0" stop-color="var(--ak-lit-1)" stop-opacity=".55"/>
+      <stop offset="1" stop-color="var(--ak-lit-1)" stop-opacity="0"/>
+    </radialGradient>
   </defs>
 
   <path d="${poly([p3(-300, -260, 0), p3(L + 320, -260, 0), p3(L + 320, W + 300, 0), p3(-300, W + 300, 0)])}"
         fill="url(#ak-ground)"/>
+
+  <!-- a few clouds, so the sky has depth behind the house -->
+  <g class="clouds" filter="url(#ak-cloud)">
+    <ellipse cx="150" cy="96" rx="120" ry="26"/><ellipse cx="236" cy="78" rx="84" ry="30"/><ellipse cx="300" cy="104" rx="90" ry="22"/>
+    <ellipse cx="${VW - 300}" cy="150" rx="140" ry="30"/><ellipse cx="${VW - 200}" cy="130" rx="96" ry="34"/><ellipse cx="${VW - 130}" cy="158" rx="100" ry="24"/>
+    <ellipse cx="${Math.round(VW / 2) - 40}" cy="262" rx="110" ry="22"/><ellipse cx="${Math.round(VW / 2) + 50}" cy="250" rx="80" ry="24"/>
+  </g>
 
   <!-- conifer at the back corner of the plot -->
   ${groundShadow(-274, -124, 46, 46, 0.09)}
@@ -675,6 +754,13 @@ const sceneMarkup = (blocks, units, ev, evOnDock) => {
     <path d="${line([p3(-251, -98, 250), p3(-200, -98, 150), p3(-302, -98, 150)])} Z"/>
     <path d="${line([p3(-251, -98, 196), p3(-193, -98, 92), p3(-309, -98, 92)])} Z"/>
     <path d="${line([p3(-251, -98, 138), p3(-188, -98, 30), p3(-314, -98, 30)])} Z"/>
+  </g>
+  <!-- the side turned away from the light -->
+  <g fill="var(--ak-shadow)" opacity=".16">
+    <path d="${line([p3(-251, -98, 300), p3(-295, -98, 206), p3(-251, -98, 206)])} Z"/>
+    <path d="${line([p3(-251, -98, 250), p3(-302, -98, 150), p3(-251, -98, 150)])} Z"/>
+    <path d="${line([p3(-251, -98, 196), p3(-309, -98, 92), p3(-251, -98, 92)])} Z"/>
+    <path d="${line([p3(-251, -98, 138), p3(-314, -98, 30), p3(-251, -98, 30)])} Z"/>
   </g>
 
   <!-- grid mast, behind the house so the roof overlaps its base -->
@@ -687,15 +773,32 @@ const sceneMarkup = (blocks, units, ev, evOnDock) => {
     <path d="${line([p3(m.x - 18, m.y, m.h + 54), p3(m.x + 18, m.y, m.h + 54)])}"/>
   </g>
 
-  <!-- house -->
+  <!-- house: a soft shadow all round the foot, then the walls -->
+  <path d="${poly([p3(-26, -20, 0), p3(L + 30, -20, 0), p3(L + 30, W + 34, 0), p3(-26, W + 34, 0)])}"
+        fill="var(--ak-shadow)" opacity=".16" filter="url(#ak-soft-l)"/>
   <path d="${poly([p3(0, W, 0), p3(L, W, 0), p3(L, W, HW), p3(0, W, HW)])}" fill="var(--ak-wall-side)"/>
+  <path d="${poly([p3(0, W, 0), p3(L, W, 0), p3(L, W, HW), p3(0, W, HW)])}" fill="url(#ak-wall-shade)"/>
+
   <path d="${poly([p3(58, W, 30), p3(178, W, 30), p3(178, W, 94), p3(58, W, 94)])}"
         fill="var(--ak-window)" stroke="var(--ak-window-edge)" stroke-width="3"/>
+
   <path d="${poly([p3(L, 0, 0), p3(L, W, 0), p3(L, W, HW), p3(L, W / 2, HW + HR), p3(L, 0, HW)])}" fill="url(#ak-wall)"/>
+  <path d="${poly([p3(L, 0, 0), p3(L, W, 0), p3(L, W, HW), p3(L, W / 2, HW + HR), p3(L, 0, HW)])}" fill="url(#ak-wall-side-shade)"/>
+
+  <!-- the attic window in the gable: it is the one place nothing stands in
+       front of, so a warm light behind the glass always shows -->
+  <path class="halo" d="${poly([p3(L, 52, 152), p3(L, 148, 152), p3(L, 148, 228), p3(L, 52, 228)])}"
+        fill="url(#ak-halo)" filter="url(#ak-soft)"/>
+  <path d="${poly([p3(L, 75, 168), p3(L, 125, 168), p3(L, 125, 212), p3(L, 75, 212)])}"
+        fill="url(#ak-lit)" stroke="var(--ak-window-edge)" stroke-width="3"/>
+  <path d="${line([p3(L, 100, 168), p3(L, 100, 212)])}" stroke="var(--ak-window-edge)" stroke-width="3" fill="none"/>
+  <path d="${poly([p3(L, 70, 164), p3(L, 130, 164), p3(L, 130, 168), p3(L, 70, 168)])}" fill="var(--ak-window-edge)"/>
+  <path d="${poly([p3(L, 0, 0), p3(L, W, 0), p3(L, W, 26), p3(L, 0, 26)])}" fill="url(#ak-wall-shade)" opacity=".7"/>
 
   <path d="${poly([p3(L, 108, 0), p3(L, 222, 0), p3(L, 222, 112), p3(L, 108, 112)])}"
         fill="var(--ak-door)" stroke="var(--ak-door-edge)" stroke-width="3"/>
   <path d="${line([p3(L, 165, 0), p3(L, 165, 112)])}" stroke="var(--ak-door-edge)" stroke-width="3" fill="none"/>
+  ${isoBox(L, 102, 0, 14, 126, 6, 'var(--ak-door)', 'var(--ak-door-edge)', 'var(--ak-wall-side)')}
 
   <g class="meter">
     <path d="${poly([p3(L, METER.y0, METER.h0), p3(L, METER.y1, METER.h0), p3(L, METER.y1, METER.h1), p3(L, METER.y0, METER.h1)])}"
@@ -708,7 +811,8 @@ const sceneMarkup = (blocks, units, ev, evOnDock) => {
 
   <!-- roof: only the plane facing the camera, plus its edges -->
   <path d="${poly([ridgeA, ridgeB, eaveB, eaveA])}" fill="url(#ak-roof)"/>
-  <g class="pv-array">${panelMarkup(blocks)}</g>
+  <path d="${poly([ridgeA, ridgeB, eaveB, eaveA])}" fill="url(#ak-roof-sheen)"/>
+  <g class="pv-array" filter="url(#ak-lift)">${panelMarkup(blocks)}</g>
   <path d="${poly([eaveA, eaveB, p3(L + VO, W + OH, eaveH - T), p3(-VO, W + OH, eaveH - T)])}" fill="var(--ak-eave)"/>
   <path d="${poly([ridgeA, ridgeB, p3(L + VO, W / 2 - 16, HW + HR - 6), p3(-VO, W / 2 - 16, HW + HR - 6)])}" fill="var(--ak-ridge)"/>
   <path d="${poly([p3(L + VO, W / 2, HW + HR), p3(L + VO, W + OH, eaveH), p3(L + VO, W + OH, eaveH - T), p3(L + VO, W / 2, HW + HR - T)])}" fill="var(--ak-verge-1)"/>
@@ -720,8 +824,12 @@ const sceneMarkup = (blocks, units, ev, evOnDock) => {
     <ellipse cx="${p3(600, W + 120, 16)[0].toFixed(1)}" cy="${p3(600, W + 120, 16)[1].toFixed(1)}" rx="30" ry="23"/>
     <ellipse cx="${p3(644, W + 158, 12)[0].toFixed(1)}" cy="${p3(644, W + 158, 12)[1].toFixed(1)}" rx="22" ry="17"/>
   </g>
+  <g fill="#fff" opacity=".16">
+    <ellipse cx="${(p3(600, W + 120, 16)[0] + 9).toFixed(1)}" cy="${(p3(600, W + 120, 16)[1] - 8).toFixed(1)}" rx="16" ry="10"/>
+    <ellipse cx="${(p3(644, W + 158, 12)[0] + 6).toFixed(1)}" cy="${(p3(644, W + 158, 12)[1] - 6).toFixed(1)}" rx="11" ry="7"/>
+  </g>
 
-  <g class="flows dc" fill="none" stroke-width="7" stroke-linecap="round" stroke-linejoin="round">
+  <g class="flows dc" fill="none" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round">
     ${Array.from({ length: blocks }, (_, i) => flowPath('', `pv${i}`, flowPv(i, units, blocks))).join('')}
   </g>
 
@@ -729,7 +837,7 @@ const sceneMarkup = (blocks, units, ev, evOnDock) => {
 
   <g class="storages">${storageMarkup(units, blocks)}</g>
 
-  <g class="flows ac" fill="none" stroke-width="8" stroke-linecap="round" stroke-linejoin="round">
+  <g class="flows ac" fill="none" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round">
     ${Array.from({ length: units }, (_, i) => flowPath('', `ac${i}`, flowStub(i, units))).join('')}
     ${flowPath('', 'batteryToHome', flowHome(units))}
     ${flowPath('', 'gridToHome', flowGrid(ev))}
@@ -741,6 +849,8 @@ const sceneMarkup = (blocks, units, ev, evOnDock) => {
   <g class="guides">
     <path d="M300 14 V150"/><path d="M${G2} 14 V150"/>
     <path d="M${GB} 872 V1024"/><path d="M${G2} 872 V1024"/>
+    <circle cx="300" cy="150" r="5"/><circle cx="${G2}" cy="150" r="5"/>
+    <circle cx="${GB}" cy="872" r="5"/><circle cx="${G2}" cy="872" r="5"/>
   </g>
 
   <g class="tap" data-tap="solar">
@@ -789,6 +899,10 @@ const STYLE = `
   --ak-meter:#ffffff; --ak-meter-edge:#d5e0ee; --ak-meter-face:#3d4652;
   --ak-unit-top:#95a0ad; --ak-unit-front:#79838f; --ak-unit-side:#4c545e;
   --ak-unit-vent:#2b323a;
+  --ak-unit-front-lo:#626c78; --ak-unit-side-lo:#383f48;
+  --ak-lit-1:#ffe2ae; --ak-lit-2:#f6bf84; --ak-glow-o:.55; --ak-halo-o:.0;
+  --ak-cloud:#ffffff; --ak-cloud-o:.6;
+  --ak-case:#2b3d57; --ak-case-o:.20; --ak-flow-hi:#ffffff;
   --ak-bay:#dfe8f4; --ak-bay-line:#c3d3e6;
   --ak-car-shell:#dde6f1; --ak-car-nose:#b7c4d4; --ak-car-side:#a3b2c4;
   --ak-car-far:#7c8b9e; --ak-car-glass:#2f3c4e; --ak-car-glass-2:#3b4a5e;
@@ -817,6 +931,10 @@ const STYLE = `
   --ak-meter:#dbe3ef; --ak-meter-edge:#a5b4c7; --ak-meter-face:#2b3542;
   --ak-unit-top:#727d8a; --ak-unit-front:#5b646f; --ak-unit-side:#363d46;
   --ak-unit-vent:#1b2027;
+  --ak-unit-front-lo:#454d57; --ak-unit-side-lo:#232930;
+  --ak-lit-1:#ffd48a; --ak-lit-2:#f0a95c; --ak-glow-o:1; --ak-halo-o:.9;
+  --ak-cloud:#4a5f7a; --ak-cloud-o:.16;
+  --ak-case:#000000; --ak-case-o:.38; --ak-flow-hi:#ffffff;
   --ak-bay:#2a3646; --ak-bay-line:#3d4c60;
   --ak-car-shell:#98a4b3; --ak-car-nose:#74808f; --ak-car-side:#64707e;
   --ak-car-far:#454e5b; --ak-car-glass:#1c2430; --ak-car-glass-2:#26313f;
@@ -862,6 +980,7 @@ text { fill:var(--ak-text); }
          stroke-linecap:round; stroke-linejoin:round; }
 .arrow.idle { stroke:var(--ak-muted); }
 .guides path { stroke:var(--ak-guide); stroke-width:2.5; stroke-dasharray:3 9; fill:none; }
+.guides circle { fill:var(--ak-guide); }
 .tap { cursor:pointer; }
 .tap:hover .val { opacity:.75; }
 .tap.dead { cursor:default; }
@@ -903,8 +1022,23 @@ text { fill:var(--ak-text); }
 .chip rect { fill:var(--ak-chip-bg); opacity:.92; }
 .chip text { font-size:26px; font-weight:600; fill:var(--ak-chip-fg); }
 
-.flow-base { stroke:var(--ak-flow-idle); opacity:.5; }
+.clouds ellipse { fill:var(--ak-cloud); opacity:var(--ak-cloud-o); }
+.halo { opacity:var(--ak-halo-o); }
+.unit-rim { fill:none; stroke:#fff; stroke-width:2.5; stroke-linecap:round; opacity:.38; }
+.unit-rim.side { opacity:.16; }
+.pv-sheen { fill:#fff; opacity:.09; stroke:none; }
+.pv-edge { stroke:#fff; stroke-width:2; opacity:.22; fill:none; stroke-linecap:round; }
+.pv.off .pv-sheen, .pv.off .pv-edge { opacity:.05; }
+
+/* a cable is a thin conduit with its own shadow; it takes the flow colour
+   only while energy actually moves through it */
+.flow-case { stroke:var(--ak-case); opacity:var(--ak-case-o); transform:translate(0,3px); }
+.flows.dc .flow-case { stroke-width:8px; }
+.flows.ac .flow-case { stroke-width:9px; }
+.flow-base { stroke:var(--ak-flow-idle); opacity:.95; }
+.flow-hi { stroke:var(--ak-flow-hi); stroke-width:1.6px; opacity:.0; transform:translate(-.8px,-1.1px); }
 [data-flow].on .flow-base, [data-spur].on .flow-base { stroke:var(--ak-flow); opacity:1; }
+[data-flow].on .flow-hi { opacity:.38; }
 /* pathLength normalises every run to 1000 units, so a single pulse
    travels the whole line at the same speed no matter how long it is */
 .flow-dash { stroke:#ffffff; opacity:0; stroke-dasharray:70 930; }
