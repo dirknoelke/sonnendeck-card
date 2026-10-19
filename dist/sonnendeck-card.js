@@ -416,15 +416,24 @@ const storageMarkup = (units, blocks) => {
 const unitFoot = (i, units) => p3(unitX(i, units) + UNIT.dx / 2, unitY + UNIT.dy, 0);
 /** the state-of-charge pill floats just above its cabinet */
 const chipAnchor = (i, units) => off(p3(unitX(i, units) + UNIT.dx / 2, unitY + UNIT.dy, UNIT.h), 0, -36);
-/** the AC rail passes in front of the cabinets, a little below their feet */
-/**
- * A point on the AC rail. The cabinets march down-right at the isometric
- * slope, so extending the rail sideways has to follow that same slope —
- * otherwise the stubs stop just short of it or poke through.
- */
-const busPt = (i, units, dx = 0, dy = 0) => off(unitFoot(i, units), dx, 46 + dx * K + dy);
 /* -------------------------------- flows -------------------------------- */
-const METER = { y0: 20, y1: 98, h0: 54, h1: 134 };
+/**
+ * The gable wall carries everything electrical, and each thing has its own
+ * stretch of it, back to front: meter, wallbox, terrace door. One conduit
+ * runs along the wall above all three — so nothing crosses anything, and
+ * nothing hangs in front of the door.
+ */
+const METER = { y0: 14, y1: 70, h0: 40, h1: 122 };
+/** height of the conduit along the gable wall; the door stays below it */
+const TRUNK_H = 96;
+/** the service line arrives at the meter's other side at this height */
+const SERVICE_H = 104;
+/** the conduit hugs the wall, a hand's breadth out */
+const TRUNK_X = HOUSE.L + 8;
+const DOOR = { y0: 158, y1: 258, h: 82 };
+/** wall mounted: the box sits on the gable wall and protrudes by d */
+const WB = { y: 96, dy: 32, h0: 38, dh: 40, d: 16 };
+const WB_Y = WB.y + WB.dy / 2;
 const MAST = { x: 482, y: -56, h: 250 };
 /** with a parking bay the mast moves back to the plot boundary */
 const MAST_EV = { x: 566, y: -132, h: 250 };
@@ -492,7 +501,6 @@ const CAR_ROOF_GLASS = [
     [116, 71],
 ];
 const CAR_WHEELS = [40, 140];
-const WB = { x: 512, y: 196, d: 32, post: 66, box: 46 };
 /** where the charging-power pill sits */
 const evChipAnchor = () => off(p3(CAR.x + CAR.dx / 2, CAR.y + CAR.dy, CAR.roof), 0, -48);
 const CAR_NEAR = CAR.y + CAR.dy;
@@ -542,6 +550,10 @@ const parkingMarkup = () => {
     return `
   <path class="bay" d="${bay}"/>
   ${groundShadow(CAR.x + 12, CAR.y + 4, CAR.dx - 24, CAR.dy - 8, 0.15)}
+  <!-- the charging cable lies on the ground and runs under the car's tail -->
+  <g class="flows ac" fill="none" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round">
+    ${flowPath('', 'ev', flowEvRun())}
+  </g>
   <g class="car" data-tap="ev">
     ${CAR_WHEELS.map((x) => wheel(x, CAR_FAR + 10, 12, 'wheel-far')).join('')}
     <path class="car-far" d="${smoothPoly(CAR_BODY.map((p) => carSide(p, -1)), 5)}"/>
@@ -567,33 +579,25 @@ const parkingMarkup = () => {
     <path class="car-tail" d="${line([carSide([4, 34], 1), carSide([19, 38], 1)])}"/>
   </g>
   <g class="wallbox" data-tap="ev">
-    ${isoBox(WB.x + 10, WB.y + 10, 0, 12, 12, WB.post, 'var(--ak-unit-top)', 'var(--ak-unit-front)', 'var(--ak-unit-side)')}
-    ${isoBox(WB.x, WB.y, WB.post, WB.d, WB.d, WB.box, 'var(--ak-meter)', 'var(--ak-meter)', 'var(--ak-meter-edge)')}
+    ${isoBox(HOUSE.L, WB.y, WB.h0, WB.d, WB.dy, WB.dh, 'var(--ak-meter)', 'var(--ak-meter-edge)', 'var(--ak-meter)')}
     <path class="wb-accent" d="${line([
-        p3(WB.x + 7, WB.y + WB.d, WB.post + 10),
-        p3(WB.x + WB.d - 7, WB.y + WB.d, WB.post + 10),
+        p3(HOUSE.L + WB.d, WB.y + 8, WB.h0 + WB.dh - 12),
+        p3(HOUSE.L + WB.d, WB.y + WB.dy - 8, WB.h0 + WB.dh - 12),
     ])}"/>
   </g>`;
 };
 /**
- * The charger cable. On a Power Dock it branches off the AC rail — the dock
- * has its own port for the car, so the feed comes from the same system as
- * everything else. Without a dock it leaves the distribution board like any
- * other house circuit.
+ * The charger is fed from the conduit on the wall: a short drop onto the
+ * box, and from its underside the cable goes straight down and straight out
+ * across the ground to the car. Dock or house circuit, the picture is the
+ * same — the feed is whatever the conduit carries.
  */
-const flowEv = (fromDock) => fromDock
-    ? smooth([
-        p3(HOUSE.L + 36, HOUSE.W + 44, 0), // branch off the rail at its corner
-        p3(WB.x + 16, WB.y + WB.d, 6),
-        p3(WB.x + 16, WB.y + WB.d, WB.post + 16),
-    ])
-    : smooth([
-        p3(HOUSE.L, 44, METER.h0 + 2),
-        p3(HOUSE.L, 44, 12),
-        p3(HOUSE.L + 30, 70, 6),
-        p3(WB.x + 16, WB.y + WB.d, 6),
-        p3(WB.x + 16, WB.y + WB.d, WB.post + 16),
-    ]);
+const flowEvDrop = () => line([p3(TRUNK_X, WB_Y, TRUNK_H), p3(TRUNK_X, WB_Y, WB.h0 + WB.dh - 2)]);
+const flowEvRun = () => smooth([
+    p3(TRUNK_X, WB_Y, WB.h0),
+    p3(TRUNK_X, WB_Y, 5),
+    p3(CAR.x + 6, WB_Y, 5),
+], 9);
 /** module block -> the solarbank underneath it */
 const flowPv = (s, units, blocks) => {
     const r = blockRect(s, blocks);
@@ -604,43 +608,61 @@ const flowPv = (s, units, blocks) => {
     return smooth([exit, [exit[0], exit[1] + 26], off(top, 0, -4)], 12);
 };
 /**
+ * The AC rail is a line on the ground in front of the cabinets, parallel to
+ * the front wall. A stub drops from each cabinet to it; because the rail
+ * lies RAIL_D further out along both ground axes, that drop is a straight
+ * vertical on screen — the same trick as the DC cables above.
+ */
+const RAIL_D = 36;
+const railY = unitY + UNIT.dy + RAIL_D;
+/** where the stub of cabinet i meets the rail, along the rail */
+const railX = (i, units) => unitX(i, units) + UNIT.dx / 2 + RAIL_D;
+/**
  * Cabinet i down to the rail. The first stub stops 20 above the rail: the
  * rail's corner starts rounding there, so running all the way down would
  * poke past the bend. The rail is drawn after the stubs and covers the gap.
  */
-const flowStub = (i, units) => line([off(unitFoot(i, units), 0, -6), busPt(i, units, 0, i === 0 ? -20 : 0)]);
-/** the rail itself, then up the gable to the distribution board */
-const flowHome = (units) => {
-    const last = Math.max(units - 1, 0);
-    return smooth([
-        // start up on the first stub, not left of it — a free end sticking out
-        // past the junction reads as a broken cable. 40 of lead-in gives the
-        // corner room for a full radius.
-        busPt(0, units, 0, -40),
-        busPt(0, units),
-        // far enough past the last cabinet that the corner rounding starts
-        // after the junction, not on top of it
-        busPt(last, units, 48),
-        p3(HOUSE.L + 36, HOUSE.W + 44, 0), // round the front corner
-        p3(HOUSE.L + 30, 120, 0), // along the front, past the door
-        p3(HOUSE.L + 30, 112, METER.h0 + 2), // climb beside the board
-        p3(HOUSE.L, 82, METER.h0 + 16), // and in through its lower edge
-    ]);
-};
-/** distribution board -> mast */
+const flowStub = (i, units) => line([off(unitFoot(i, units), 0, -6), off(p3(railX(i, units), railY, 0), 0, i === 0 ? -20 : 0)]);
 /**
- * The service line runs down the mast and along the ground to the house.
- * Anything cutting across from the mast head would clip the roof verge,
- * which is exactly where the two silhouettes meet.
+ * From the rail to the meter, in four straight runs and nothing diagonal:
+ * along the rail, back along the ground to the front corner of the house,
+ * up the corner, and along the gable wall above the door into the meter.
+ * Every run follows one of the three axes of the picture.
+ */
+const flowHome = (units) => {
+    const x0 = railX(0, units);
+    const xLast = railX(Math.max(units - 1, 0), units);
+    // the turn sits at the conduit, unless the last cabinet stands beyond it
+    const xTurn = xLast <= TRUNK_X ? TRUNK_X : xLast + 16;
+    const yCorner = HOUSE.W + 10;
+    const pts = [
+        // start up on the first stub, not left of it — a free end sticking out
+        // past the junction reads as a broken cable
+        off(p3(x0, railY, 0), 0, -40),
+        p3(x0, railY, 0),
+        p3(xTurn, railY, 0),
+        p3(xTurn, yCorner, 0),
+    ];
+    if (xTurn > TRUNK_X)
+        pts.push(p3(TRUNK_X, yCorner, 0));
+    pts.push(p3(TRUNK_X, yCorner, TRUNK_H), // up the front corner
+    p3(TRUNK_X, METER.y1 + 6, TRUNK_H), // along the wall, above door and wallbox
+    p3(HOUSE.L + 2, METER.y1 - 2, TRUNK_H));
+    return smooth(pts, 10);
+};
+/**
+ * The service line comes off the mast and reaches the house at the back
+ * end of the gable, where the meter is. It never crosses the roof verge:
+ * it drops to wall height first and arrives level.
  */
 const flowGrid = (ev) => {
     const m = mastOf(ev);
     return smooth([
         p3(m.x, m.y + 8, m.h - 18), // off the lowest crossarm
-        p3(m.x - 5, m.y + 6, 105), // down the mast, clear of the roof corner
-        p3(HOUSE.L + 40, 40, 110),
-        p3(HOUSE.L, METER.y0 + 12, METER.h1 - 26), // in through the right edge
-    ]);
+        p3(m.x - 5, m.y + 6, SERVICE_H), // down the mast to wall height
+        p3(HOUSE.L + 36, METER.y0 + 8, SERVICE_H),
+        p3(HOUSE.L, METER.y0 + 8, SERVICE_H), // level in through the meter's back edge
+    ], 12);
 };
 /**
  * A cable is four strokes on one path: a soft shadow beneath it, the cable
@@ -746,23 +768,6 @@ const sceneMarkup = (blocks, units, ev, evOnDock) => {
     <ellipse cx="${Math.round(VW / 2) - 40}" cy="262" rx="110" ry="22"/><ellipse cx="${Math.round(VW / 2) + 50}" cy="250" rx="80" ry="24"/>
   </g>
 
-  <!-- conifer at the back corner of the plot -->
-  ${groundShadow(-274, -124, 46, 46, 0.09)}
-  <path d="${poly([p3(-258, -104, 0), p3(-244, -104, 0), p3(-244, -104, 62), p3(-258, -104, 62)])}" fill="var(--ak-trunk)"/>
-  <g fill="var(--ak-tree)">
-    <path d="${line([p3(-251, -98, 300), p3(-207, -98, 206), p3(-295, -98, 206)])} Z"/>
-    <path d="${line([p3(-251, -98, 250), p3(-200, -98, 150), p3(-302, -98, 150)])} Z"/>
-    <path d="${line([p3(-251, -98, 196), p3(-193, -98, 92), p3(-309, -98, 92)])} Z"/>
-    <path d="${line([p3(-251, -98, 138), p3(-188, -98, 30), p3(-314, -98, 30)])} Z"/>
-  </g>
-  <!-- the side turned away from the light -->
-  <g fill="var(--ak-shadow)" opacity=".16">
-    <path d="${line([p3(-251, -98, 300), p3(-295, -98, 206), p3(-251, -98, 206)])} Z"/>
-    <path d="${line([p3(-251, -98, 250), p3(-302, -98, 150), p3(-251, -98, 150)])} Z"/>
-    <path d="${line([p3(-251, -98, 196), p3(-309, -98, 92), p3(-251, -98, 92)])} Z"/>
-    <path d="${line([p3(-251, -98, 138), p3(-314, -98, 30), p3(-251, -98, 30)])} Z"/>
-  </g>
-
   <!-- grid mast, behind the house so the roof overlaps its base -->
   ${groundShadow(m.x - 14, m.y - 6, 24, 24, 0.08)}
   <g class="mast" fill="none" stroke-linecap="round">
@@ -795,10 +800,11 @@ const sceneMarkup = (blocks, units, ev, evOnDock) => {
   <path d="${poly([p3(L, 70, 164), p3(L, 130, 164), p3(L, 130, 168), p3(L, 70, 168)])}" fill="var(--ak-window-edge)"/>
   <path d="${poly([p3(L, 0, 0), p3(L, W, 0), p3(L, W, 26), p3(L, 0, 26)])}" fill="url(#ak-wall-shade)" opacity=".7"/>
 
-  <path d="${poly([p3(L, 108, 0), p3(L, 222, 0), p3(L, 222, 112), p3(L, 108, 112)])}"
-        fill="var(--ak-door)" stroke="var(--ak-door-edge)" stroke-width="3"/>
-  <path d="${line([p3(L, 165, 0), p3(L, 165, 112)])}" stroke="var(--ak-door-edge)" stroke-width="3" fill="none"/>
-  ${isoBox(L, 102, 0, 14, 126, 6, 'var(--ak-door)', 'var(--ak-door-edge)', 'var(--ak-wall-side)')}
+  <!-- the terrace door, with a paved terrace in front of it -->
+  <path d="${poly([p3(L, DOOR.y0, 5), p3(L, DOOR.y1, 5), p3(L, DOOR.y1, DOOR.h), p3(L, DOOR.y0, DOOR.h)])}"
+        fill="var(--ak-window)" stroke="var(--ak-door-edge)" stroke-width="4"/>
+  <path d="${line([p3(L, (DOOR.y0 + DOOR.y1) / 2, 5), p3(L, (DOOR.y0 + DOOR.y1) / 2, DOOR.h)])}" stroke="var(--ak-door-edge)" stroke-width="3" fill="none"/>
+  ${isoBox(L, DOOR.y0 - 14, 0, 54, DOOR.y1 - DOOR.y0 + 28, 5, 'var(--ak-door)', 'var(--ak-door-edge)', 'var(--ak-wall-side)')}
 
   <g class="meter">
     <path d="${poly([p3(L, METER.y0, METER.h0), p3(L, METER.y1, METER.h0), p3(L, METER.y1, METER.h1), p3(L, METER.y0, METER.h1)])}"
@@ -818,17 +824,6 @@ const sceneMarkup = (blocks, units, ev, evOnDock) => {
   <path d="${poly([p3(L + VO, W / 2, HW + HR), p3(L + VO, W + OH, eaveH), p3(L + VO, W + OH, eaveH - T), p3(L + VO, W / 2, HW + HR - T)])}" fill="var(--ak-verge-1)"/>
   <path d="${poly([p3(L + VO, W / 2, HW + HR), p3(L + VO, -OH, eaveH), p3(L + VO, -OH, eaveH - T), p3(L + VO, W / 2, HW + HR - T)])}" fill="var(--ak-verge-2)"/>
 
-  <!-- shrubs on the ground, front right -->
-  ${groundShadow(580, W + 100, 40, 40, 0.1)}
-  <g fill="var(--ak-bush)">
-    <ellipse cx="${p3(600, W + 120, 16)[0].toFixed(1)}" cy="${p3(600, W + 120, 16)[1].toFixed(1)}" rx="30" ry="23"/>
-    <ellipse cx="${p3(644, W + 158, 12)[0].toFixed(1)}" cy="${p3(644, W + 158, 12)[1].toFixed(1)}" rx="22" ry="17"/>
-  </g>
-  <g fill="#fff" opacity=".16">
-    <ellipse cx="${(p3(600, W + 120, 16)[0] + 9).toFixed(1)}" cy="${(p3(600, W + 120, 16)[1] - 8).toFixed(1)}" rx="16" ry="10"/>
-    <ellipse cx="${(p3(644, W + 158, 12)[0] + 6).toFixed(1)}" cy="${(p3(644, W + 158, 12)[1] - 6).toFixed(1)}" rx="11" ry="7"/>
-  </g>
-
   <g class="flows dc" fill="none" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round">
     ${Array.from({ length: blocks }, (_, i) => flowPath('', `pv${i}`, flowPv(i, units, blocks))).join('')}
   </g>
@@ -841,7 +836,7 @@ const sceneMarkup = (blocks, units, ev, evOnDock) => {
     ${Array.from({ length: units }, (_, i) => flowPath('', `ac${i}`, flowStub(i, units))).join('')}
     ${flowPath('', 'batteryToHome', flowHome(units))}
     ${flowPath('', 'gridToHome', flowGrid(ev))}
-    ${ev ? flowPath('', 'ev', flowEv(evOnDock)) : ''}
+    ${ev ? flowPath('', 'ev', flowEvDrop()) : ''}
   </g>
 
   <g class="chips" id="ak-chips"></g>
