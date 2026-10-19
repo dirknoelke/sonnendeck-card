@@ -1,0 +1,85 @@
+# Der Normalfall: nur die Geräte nennen, alles andere findet die Karte selbst.
+# Beim Anlegen über die UI trägt sie alle gefundenen Systeme automatisch ein.
+type: custom:sonnendeck-card
+systems:
+  - device: 8d1f0c3a9b7e4d52a1c6f0b3e7d94a15   # Mini-PV Dach
+  - device: 2c7b48e6d0fa4913b85e1c7d6a03f942   # Mini-PV Garten
+
+---
+# Getrennte Zähler je System — dann darf summiert werden
+type: custom:sonnendeck-card
+title: Energie
+systems:
+  - device: 8d1f0c3a9b7e4d52a1c6f0b3e7d94a15
+  - device: 2c7b48e6d0fa4913b85e1c7d6a03f942
+combine:
+  grid: sum
+  home: sum
+
+---
+# Eigener Hauszähler, z. B. Tasmota mit SML-Lesekopf
+type: custom:sonnendeck-card
+title: Anker Solaranlage
+systems:
+  - device: 8d1f0c3a9b7e4d52a1c6f0b3e7d94a15
+  - device: 2c7b48e6d0fa4913b85e1c7d6a03f942
+house:
+  grid_import: sensor.tasmota_sml_in    # Momentanleistung in W, nicht kWh
+  grid_export: sensor.tasmota_sml_out
+  # load bleibt leer: die Hauslast wird als Bilanz gerechnet
+
+---
+# Mit Wallbox: Stellplatz und Auto kommen ins Bild
+type: custom:sonnendeck-card
+title: Anker Solaranlage
+systems:
+  - device: 8d1f0c3a9b7e4d52a1c6f0b3e7d94a15
+  - device: 2c7b48e6d0fa4913b85e1c7d6a03f942
+house:
+  grid_import: sensor.tasmota_sml_in
+  grid_export: sensor.tasmota_sml_out
+wallbox:
+  device: 7a2e5c91b3d84f06a2e9c1b7d4f83a52
+  # source: dock    # Standard sobald ein Dock eingetragen ist
+  # in_home_load: true
+
+---
+# Mit Power Dock: die Speicher werden zu einem Gerät zusammengefasst,
+# die Ladestände bleiben einzeln über dem Dock sichtbar
+type: custom:sonnendeck-card
+dock: 5f3a1c8e7b2d46a09c1e8f7a3b5d2c40
+systems:
+  - device: 8d1f0c3a9b7e4d52a1c6f0b3e7d94a15
+  - device: 2c7b48e6d0fa4913b85e1c7d6a03f942
+
+---
+# Ein System, eigene Beschriftungen, kW ab 1000 W
+type: custom:sonnendeck-card
+systems:
+  - device: 8d1f0c3a9b7e4d52a1c6f0b3e7d94a15
+    device_name: Solarbank 3 E2700 Pro
+kw_threshold: 1000
+dark_mode: auto
+
+---
+# Ganz ohne Anker-Integration — alles von Hand, z. B. Shelly + Template-Sensoren
+type: custom:sonnendeck-card
+title: Balkonkraftwerk
+systems:
+  - device_name: Speicher
+    entities:
+      solar_1: sensor.wechselrichter_pv1
+      solar_2: sensor.wechselrichter_pv2
+      grid: sensor.shelly_3em_total_power     # + Bezug / − Einspeisung
+      home: sensor.hausverbrauch
+      battery_soc: sensor.speicher_soc
+      battery_power: sensor.speicher_leistung # + laden
+      output: sensor.speicher_ausgang
+
+---
+# Gemischt: Gerät erkennen lassen, aber den Netzzähler selbst setzen
+type: custom:sonnendeck-card
+systems:
+  - device: 8d1f0c3a9b7e4d52a1c6f0b3e7d94a15
+    entities:
+      grid: sensor.shelly_3em_total_power

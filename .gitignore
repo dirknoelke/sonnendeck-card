@@ -1,0 +1,7 @@
+node_modules/
+*.log
+.DS_Store
+proto/*
+!proto/preview.html
+_to_delete/
+_alt/

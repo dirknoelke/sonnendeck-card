@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="de"><head><meta charset="utf-8">
+<title>Sonnendeck preview</title>
+<style>
+  html,body{margin:0;background:#fff;font-family:Roboto,system-ui,sans-serif}
+  .wrap{width:620px}
+</style>
+<script type="module" src="../dist/sonnendeck-card.js"></script>
+</head><body>
+<div class="wrap"><sonnendeck-card id="c"></sonnendeck-card></div>
+<script type="module">
+const p = new URLSearchParams(location.search);
+const num = (v, u = 'W') => ({ state: String(v), attributes: { unit_of_measurement: u } });
+
+const states = {
+  'sensor.dach_pv1': num(480), 'sensor.dach_pv2': num(455),
+  'sensor.dach_pv3': num(410), 'sensor.dach_pv4': num(390),
+  'sensor.dach_soc': num(62, '%'), 'sensor.dach_bat': num(540),
+  'sensor.dach_out': num(1100),
+
+  'sensor.garten_pv1': num(320), 'sensor.garten_pv2': num(305),
+  'sensor.garten_pv3': num(300), 'sensor.garten_pv4': num(285),
+  'sensor.garten_soc': num(48, '%'), 'sensor.garten_bat': num(300),
+  'sensor.garten_out': num(800),
+
+  'sensor.sml_in': num(420), 'sensor.sml_out': num(0),
+  'sensor.wallbox': num(1400),
+};
+
+const card = document.getElementById('c');
+card.setConfig({
+  type: 'custom:sonnendeck-card',
+  title: 'Solaranlagen',
+  systems: [
+    { name: 'Dach', entities: {
+      solar_1: 'sensor.dach_pv1', solar_2: 'sensor.dach_pv2',
+      solar_3: 'sensor.dach_pv3', solar_4: 'sensor.dach_pv4',
+      battery_soc: 'sensor.dach_soc', battery_power: 'sensor.dach_bat',
+      output: 'sensor.dach_out' } },
+    { name: 'Garten', entities: {
+      solar_1: 'sensor.garten_pv1', solar_2: 'sensor.garten_pv2',
+      solar_3: 'sensor.garten_pv3', solar_4: 'sensor.garten_pv4',
+      battery_soc: 'sensor.garten_soc', battery_power: 'sensor.garten_bat',
+      output: 'sensor.garten_out' } },
+  ],
+  house: { grid_import: 'sensor.sml_in', grid_export: 'sensor.sml_out' },
+  wallbox: { power: 'sensor.wallbox' },
+});
+card.hass = {
+  states,
+  locale: { language: 'de' },
+  themes: { darkMode: p.has('dark') },
+};
+</script>
+</body></html>
