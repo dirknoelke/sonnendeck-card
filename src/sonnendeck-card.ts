@@ -633,21 +633,25 @@ const chipAnchor = (i: number, units: number): Pt =>
 
 /**
  * The gable wall carries everything electrical, and each thing has its own
- * stretch of it, back to front: meter, wallbox, terrace door. One conduit
- * runs along the wall above all three — so nothing crosses anything, and
- * nothing hangs in front of the door.
+ * stretch of it, back to front: meter, wallbox, terrace door. One cable
+ * runs along the foot of the wall — and goes underground beneath the
+ * terrace in front of the door, so nothing hangs in front of it.
  */
 const METER = { y0: 14, y1: 70, h0: 40, h1: 122 };
-/** height of the conduit along the gable wall; the door stays below it */
-const TRUNK_H = 96;
-/** the service line arrives at the meter's other side at this height */
+const METER_Y = (METER.y0 + METER.y1) / 2;
+/** the service line arrives at the meter's back edge at this height */
 const SERVICE_H = 104;
-/** the conduit hugs the wall, a hand's breadth out */
+/** the cable follows the wall a hand's breadth out */
 const TRUNK_X = HOUSE.L + 8;
-const DOOR = { y0: 158, y1: 258, h: 82 };
+const DOOR = { y0: 158, y1: 258, h: 120 };
+/** the terrace slab in front of the door; the cable runs beneath it */
+const TERRACE = { y0: DOOR.y0 - 14, y1: DOOR.y1 + 14, d: 54, h: 5 };
 /** wall mounted: the box sits on the gable wall and protrudes by d */
-const WB = { y: 96, dy: 32, h0: 38, dh: 40, d: 16 };
-const WB_Y = WB.y + WB.dy / 2;
+const WB = { y: 96, dy: 32, h0: 38, dh: 40, d: 22 };
+/** the wallbox is fed from the front half of its underside */
+const WB_FEED_Y = WB.y + WB.dy - 6;
+/** the charging cable leaves the middle of its outer face and ends at the car's tail */
+const WB_OUT_Y = WB.y + WB.dy / 2;
 const MAST = { x: 482, y: -56, h: 250 };
 /** with a parking bay the mast moves back to the plot boundary */
 const MAST_EV = { x: 566, y: -132, h: 250 };
@@ -663,67 +667,79 @@ const PARK = { x0: 528, x1: 772, y0: 34, y1: 212 };
  * height) along the car's own axis; sweeping them across the width gives
  * the visible faces without a single hand-placed polygon.
  */
-const CAR = { x: 578, y: 84, dx: 176, dy: 68, belt: 46, roof: 72 };
+const CAR = { x: 578, y: 84, dx: 176, dy: 68, roof: 58 };
+/**
+ * Proportions of a long, low saloon, in picture units (one unit is about
+ * 2.8 cm): 176 long, 68 wide, 54 to the roof. The earlier car stood 72 high,
+ * which is a van — that is why it looked stubby.
+ */
 /** how far the cabin is inset from the body sides */
-const CAR_TUMBLE = 7;
+const CAR_TUMBLE = 8;
 
 /** lower body, closed: shoulder line, nose, underside, tail */
 const CAR_BODY: Array<[number, number]> = [
-  [5, 45],
-  [18, 47],
-  [70, 47],
-  [130, 46],
-  [162, 43],
-  [175, 36],
-  [176, 24],
-  [168, 13],
-  [146, 11],
-  [34, 11],
-  [10, 13],
-  [3, 22],
-  [3, 38],
+  [3, 29],
+  [18, 34],
+  [70, 36],
+  [124, 36],
+  [152, 31],
+  [168, 25],
+  [175, 17],
+  [176, 10],
+  [172, 6],
+  [150, 6],
+  [32, 6],
+  [8, 7],
+  [2, 12],
+  [2, 22],
 ];
-/** indices 0..5 sweep into the deck, the shoulder ledges and the bonnet */
+/** indices 0..5 sweep into the deck, the shoulder and the bonnet */
 const CAR_BODY_TOP = 6;
 /** indices 5..7 sweep into the front face */
 const CAR_BODY_NOSE = 8;
 
-/** the greenhouse, sitting on the shoulder with a short deck behind it */
+/**
+ * The greenhouse: a long fastback — the roof peaks over the front seats and
+ * falls away to a short deck, and the screen is raked far back.
+ */
 const CAR_CAB: Array<[number, number]> = [
-  [20, 47],
-  [40, 61],
-  [66, 71],
-  [92, 73],
-  [118, 71],
-  [134, 60],
-  [148, 47],
-  [148, 41],
-  [20, 41],
+  [18, 34],
+  [30, 41],
+  [52, 50],
+  [80, 54],
+  [102, 50],
+  [124, 38],
+  [130, 34],
+  [130, 30],
+  [18, 30],
 ];
-const CAR_CAB_TOP = 7;
-/** the window band, inset so the pillars stay body-coloured */
+/** indices 0..4 are the roof and the fastback, 4..6 the raked screen */
+const CAR_CAB_ROOF = 5;
+const CAR_CAB_SCREEN_FROM = 4;
+const CAR_CAB_SCREEN_TO = 7;
+/** the side glass, inset so the pillars stay body-coloured */
 const CAR_GLASS: Array<[number, number]> = [
-  [29, 50],
-  [46, 60],
-  [67, 68],
-  [92, 70],
-  [116, 67],
-  [131, 57],
-  [141, 50],
-  [141, 48],
+  [26, 37],
+  [36, 42.5],
+  [54, 49.5],
+  [80, 52],
+  [100, 48.5],
+  [120, 39],
+  [125, 37],
 ];
-/** the panoramic roof panel */
+/** the glass roof */
 const CAR_ROOF_GLASS: Array<[number, number]> = [
-  [68, 71],
-  [92, 73],
-  [116, 71],
+  [46, 48.5],
+  [80, 53],
+  [100, 50],
 ];
 
-const CAR_WHEELS = [40, 140];
+/** wheel centres along the car; the wheelbase is 104 */
+const CAR_WHEELS = [36, 140];
 
 /** where the charging-power pill sits */
 const evChipAnchor = (): Pt =>
-  off(p3(CAR.x + CAR.dx / 2, CAR.y + CAR.dy, CAR.roof), 0, -48);
+  off(p3(CAR.x + CAR.dx / 2, CAR.y + CAR.dy, CAR.roof), 34, -48);
 
 const CAR_NEAR = CAR.y + CAR.dy;
 const CAR_FAR = CAR.y;
@@ -762,23 +778,37 @@ const parkingMarkup = (): string => {
    * by the isometric slope — atan(K) ≈ 15.6° — which is what makes it read
    * as a wheel rather than a sticker.
    */
+  const tilt = ((Math.atan(K) * 180) / Math.PI).toFixed(1);
   const wheel = (x: number, y: number, r: number, cls: string): string => {
     const c = p3(CAR.x + x, y, r);
-    const a = ((Math.atan(K) * 180) / Math.PI).toFixed(1);
-    return `<g class="${cls}" transform="translate(${fp(c).replace(' ', ' ')}) rotate(${a})">
+    const rim = r * 0.62;
+    // five spokes, drawn in the wheel's own (already tilted) frame
+    const spokes = Array.from({ length: 5 }, (_, k) => {
+      const t = ((-90 + k * 72) * Math.PI) / 180;
+      return `M0 0 L${(rim * 0.92 * Math.cos(t)).toFixed(1)} ${(rim * 0.92 * 0.95 * Math.sin(t)).toFixed(1)}`;
+    }).join(' ');
+    return `<g class="${cls}" transform="translate(${fp(c)}) rotate(${tilt})">
       <ellipse rx="${r}" ry="${(r * 0.95).toFixed(1)}" fill="var(--ak-car-wheel)"/>
-      <ellipse rx="${(r * 0.55).toFixed(1)}" ry="${(r * 0.52).toFixed(1)}" fill="var(--ak-car-rim)"/>
-      <ellipse rx="${(r * 0.18).toFixed(1)}" ry="${(r * 0.17).toFixed(1)}" fill="var(--ak-car-wheel)"/>
+      <ellipse rx="${rim.toFixed(1)}" ry="${(rim * 0.95).toFixed(1)}" fill="var(--ak-car-rim)"/>
+      <path d="${spokes}" stroke="var(--ak-car-wheel)" stroke-width="${Math.max(2, r * 0.17).toFixed(1)}" stroke-linecap="round" fill="none"/>
+      <ellipse rx="${(r * 0.2).toFixed(1)}" ry="${(r * 0.19).toFixed(1)}" fill="var(--ak-car-wheel)"/>
     </g>`;
+  };
+  /** the dark recess the wheel sits in, cut off at the sill */
+  const arch = (x: number, r: number): string => {
+    const c = p3(CAR.x + x, CAR_NEAR - carTaper(x) - 1, r);
+    return `<ellipse class="arch" transform="translate(${fp(c)}) rotate(${tilt})" rx="${r + 4}" ry="${((r + 4) * 0.95).toFixed(1)}"/>`;
   };
 
   const bodyTop = CAR_BODY.slice(0, CAR_BODY_TOP);
   const bodyNose = CAR_BODY.slice(CAR_BODY_TOP - 1, CAR_BODY_NOSE);
-  const cabTop = CAR_CAB.slice(0, CAR_CAB_TOP);
+  const cabRoof = CAR_CAB.slice(0, CAR_CAB_ROOF);
+  const cabScreen = CAR_CAB.slice(CAR_CAB_SCREEN_FROM, CAR_CAB_SCREEN_TO);
+  const bodySide = smoothPoly(CAR_BODY.map((p) => carSide(p, 1)), 6);
 
-  /* a light bar drawn across the car at one point of the profile */
-  const bar = (x: number, h: number, inset: number): string =>
-    line([carSide([x, h], -1, inset), carSide([x, h], 1, inset)]);
+  /* a headlamp: a short strip near each corner of the nose, not a full bar */
+  const lamp = (side: 1 | -1): string =>
+    line([carSide([175, 19], side, 5), carSide([175, 19], side, 21)]);
 
   return `
   <path class="bay" d="${bay}"/>
@@ -788,28 +818,37 @@ const parkingMarkup = (): string => {
     ${flowPath('', 'ev', flowEvRun())}
   </g>
   <g class="car" data-tap="ev">
-    ${CAR_WHEELS.map((x) => wheel(x, CAR_FAR + 10, 12, 'wheel-far')).join('')}
-    <path class="car-far" d="${smoothPoly(CAR_BODY.map((p) => carSide(p, -1)), 5)}"/>
+    <clipPath id="ak-car-clip"><path d="${bodySide}"/></clipPath>
+    ${CAR_WHEELS.map((x) => wheel(x, CAR_FAR + 8, 11, 'wheel-far')).join('')}
+    <path class="car-far" d="${smoothPoly(CAR_BODY.map((p) => carSide(p, -1)), 6)}"/>
     <path class="car-shell" d="${carBand(bodyTop)}"/>
     <path class="car-nose" d="${carBand(bodyNose)}"/>
-    <path class="car-roof" d="${carBand(cabTop, CAR_TUMBLE)}"/>
-    <path class="car-glass-top" d="${carBand(CAR_ROOF_GLASS, CAR_TUMBLE + 8)}"/>
+    <path class="car-roof" d="${carBand(cabRoof, CAR_TUMBLE)}"/>
+    <path class="car-cab" d="${carBand(cabScreen, CAR_TUMBLE)}"/>
+    <path class="car-glass" d="${carBand(cabScreen, CAR_TUMBLE + 3)}"/>
+    <path class="car-glass-top" d="${carBand(CAR_ROOF_GLASS, CAR_TUMBLE + 6)}"/>
     <path class="car-cab" d="${smoothPoly(CAR_CAB.map((p) => carSide(p, 1, CAR_TUMBLE)), 6)}"/>
     <path class="car-glass" d="${smoothPoly(CAR_GLASS.map((p) => carSide(p, 1, CAR_TUMBLE)), 5)}"/>
     <path class="car-pillar" d="${line([
-      carSide([84, 48], 1, CAR_TUMBLE),
-      carSide([84, 69], 1, CAR_TUMBLE),
+      carSide([61, 38], 1, CAR_TUMBLE),
+      carSide([61, 50], 1, CAR_TUMBLE),
     ])}"/>
-    <path class="car-trim" d="${line(cabTop.map((p) => carSide(p, 1, CAR_TUMBLE)))}"/>
-    <path class="car-side" d="${smoothPoly(CAR_BODY.map((p) => carSide(p, 1)), 5)}"/>
+    <path class="car-trim" d="${line(cabRoof.map((p) => carSide(p, 1, CAR_TUMBLE)))}"/>
+    <path class="car-side" d="${bodySide}"/>
     <path class="car-crease" d="${line([
-      carSide([14, 30], 1),
-      carSide([92, 32], 1),
-      carSide([158, 29], 1),
+      carSide([16, 26], 1),
+      carSide([88, 27], 1),
+      carSide([152, 24], 1),
     ])}"/>
-    ${CAR_WHEELS.map((x) => wheel(x, CAR_NEAR - carTaper(x) - 1, 15, 'wheel')).join('')}
-    <path class="car-light" d="${bar(175, 29, 5)}"/>
-    <path class="car-tail" d="${line([carSide([4, 34], 1), carSide([19, 38], 1)])}"/>
+    <path class="car-shine" d="${line([
+      carSide([24, 33.5], 1),
+      carSide([84, 35.2], 1),
+      carSide([132, 34.4], 1),
+    ])}"/>
+    <g clip-path="url(#ak-car-clip)">${CAR_WHEELS.map((x) => arch(x, 13)).join('')}</g>
+    ${CAR_WHEELS.map((x) => wheel(x, CAR_NEAR - carTaper(x) - 1, 13, 'wheel')).join('')}
+    <path class="car-light" d="${lamp(1)} ${lamp(-1)}"/>
+    <path class="car-tail" d="${line([carSide([3, 22], 1), carSide([16, 29], 1)])}"/>
   </g>
   <g class="wallbox" data-tap="ev">
     ${isoBox(HOUSE.L, WB.y, WB.h0, WB.d, WB.dy, WB.dh, 'var(--ak-meter)', 'var(--ak-meter-edge)', 'var(--ak-meter)')}
@@ -821,20 +860,21 @@ const parkingMarkup = (): string => {
 };
 
 /**
- * The charger is fed from the conduit on the wall: a short drop onto the
- * box, and from its underside the cable goes straight down and straight out
- * across the ground to the car. Dock or house circuit, the picture is the
- * same — the feed is whatever the conduit carries.
+ * The charger takes its feed from the cable at the foot of the wall: a short
+ * riser up to the underside of the box. The car's cable hangs from the box
+ * to the car's tail and sags between them, as a charging cable does. Dock or
+ * house circuit, the picture is the same — the feed is whatever the cable
+ * carries.
  */
-const flowEvDrop = (): string =>
-  line([p3(TRUNK_X, WB_Y, TRUNK_H), p3(TRUNK_X, WB_Y, WB.h0 + WB.dh - 2)]);
+const flowEvFeed = (): string =>
+  line([p3(TRUNK_X, WB_FEED_Y, 0), p3(TRUNK_X, WB_FEED_Y, WB.h0 - 6)]);
 
 const flowEvRun = (): string =>
   smooth([
-    p3(TRUNK_X, WB_Y, WB.h0),
-    p3(TRUNK_X, WB_Y, 5),
-    p3(CAR.x + 6, WB_Y, 5),
-  ], 9);
+    p3(HOUSE.L + WB.d, WB_OUT_Y, WB.h0 + 8),
+    p3(HOUSE.L + 52, WB_OUT_Y, 22), // the low point of the sag
+    p3(CAR.x + 4, WB_OUT_Y, 30),
+  ], 26);
 
 /** module block -> the solarbank underneath it */
 const flowPv = (s: number, units: number, blocks: number): string => {
@@ -867,30 +907,29 @@ const flowStub = (i: number, units: number): string =>
   line([off(unitFoot(i, units), 0, -6), off(p3(railX(i, units), railY, 0), 0, i === 0 ? -20 : 0)]);
 
 /**
- * From the rail to the meter, in four straight runs and nothing diagonal:
- * along the rail, back along the ground to the front corner of the house,
- * up the corner, and along the gable wall above the door into the meter.
+ * From the rail to the meter, in straight runs and nothing diagonal: along
+ * the rail, back along the foot of the gable wall — beneath the terrace,
+ * where the slab hides it — and up the wall into the meter's underside.
  * Every run follows one of the three axes of the picture.
  */
 const flowHome = (units: number): string => {
   const x0 = railX(0, units);
   const xLast = railX(Math.max(units - 1, 0), units);
-  // the turn sits at the conduit, unless the last cabinet stands beyond it
+  // the turn sits at the wall, unless the last cabinet stands beyond it
   const xTurn = xLast <= TRUNK_X ? TRUNK_X : xLast + 16;
-  const yCorner = HOUSE.W + 10;
   const pts: Pt[] = [
     // start up on the first stub, not left of it — a free end sticking out
     // past the junction reads as a broken cable
     off(p3(x0, railY, 0), 0, -40),
     p3(x0, railY, 0),
     p3(xTurn, railY, 0),
-    p3(xTurn, yCorner, 0),
   ];
-  if (xTurn > TRUNK_X) pts.push(p3(TRUNK_X, yCorner, 0));
+  if (xTurn > TRUNK_X) {
+    pts.push(p3(xTurn, HOUSE.W + 10, 0), p3(TRUNK_X, HOUSE.W + 10, 0));
+  }
   pts.push(
-    p3(TRUNK_X, yCorner, TRUNK_H), // up the front corner
-    p3(TRUNK_X, METER.y1 + 6, TRUNK_H), // along the wall, above door and wallbox
-    p3(HOUSE.L + 2, METER.y1 - 2, TRUNK_H), // into the meter's front edge
+    p3(TRUNK_X, METER_Y, 0), // along the wall, under the terrace slab
+    p3(TRUNK_X, METER_Y, METER.h0 + 1), // and up into the meter
   );
   return smooth(pts, 10);
 };
@@ -997,6 +1036,13 @@ const sceneMarkup = (blocks: number, units: number, ev: boolean, evOnDock: boole
       <stop offset="1" stop-color="var(--ak-unit-side-lo)"/>
     </linearGradient>
 
+    <!-- the car's flank: light on the shoulder, darker at the sill -->
+    <linearGradient id="ak-car-body" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="var(--ak-car-side-hi)"/>
+      <stop offset=".55" stop-color="var(--ak-car-side)"/>
+      <stop offset="1" stop-color="var(--ak-car-nose)"/>
+    </linearGradient>
+
     <!-- lit windows -->
     <linearGradient id="ak-lit" x1="0" y1="0" x2="0" y2="1">
       <stop offset="0" stop-color="var(--ak-lit-1)"/>
@@ -1050,11 +1096,10 @@ const sceneMarkup = (blocks: number, units: number, ev: boolean, evOnDock: boole
   <path d="${poly([p3(L, 70, 164), p3(L, 130, 164), p3(L, 130, 168), p3(L, 70, 168)])}" fill="var(--ak-window-edge)"/>
   <path d="${poly([p3(L, 0, 0), p3(L, W, 0), p3(L, W, 26), p3(L, 0, 26)])}" fill="url(#ak-wall-shade)" opacity=".7"/>
 
-  <!-- the terrace door, with a paved terrace in front of it -->
-  <path d="${poly([p3(L, DOOR.y0, 5), p3(L, DOOR.y1, 5), p3(L, DOOR.y1, DOOR.h), p3(L, DOOR.y0, DOOR.h)])}"
+  <!-- the terrace door: two leaves of glass in a frame -->
+  <path d="${poly([p3(L, DOOR.y0, 0), p3(L, DOOR.y1, 0), p3(L, DOOR.y1, DOOR.h), p3(L, DOOR.y0, DOOR.h)])}"
         fill="var(--ak-window)" stroke="var(--ak-door-edge)" stroke-width="4"/>
-  <path d="${line([p3(L, (DOOR.y0 + DOOR.y1) / 2, 5), p3(L, (DOOR.y0 + DOOR.y1) / 2, DOOR.h)])}" stroke="var(--ak-door-edge)" stroke-width="3" fill="none"/>
-  ${isoBox(L, DOOR.y0 - 14, 0, 54, DOOR.y1 - DOOR.y0 + 28, 5, 'var(--ak-door)', 'var(--ak-door-edge)', 'var(--ak-wall-side)')}
+  <path d="${line([p3(L, (DOOR.y0 + DOOR.y1) / 2, 0), p3(L, (DOOR.y0 + DOOR.y1) / 2, DOOR.h)])}" stroke="var(--ak-door-edge)" stroke-width="3" fill="none"/>
 
   <g class="meter">
     <path d="${poly([p3(L, METER.y0, METER.h0), p3(L, METER.y1, METER.h0), p3(L, METER.y1, METER.h1), p3(L, METER.y0, METER.h1)])}"
@@ -1086,7 +1131,13 @@ const sceneMarkup = (blocks: number, units: number, ev: boolean, evOnDock: boole
     ${Array.from({ length: units }, (_, i) => flowPath('', `ac${i}`, flowStub(i, units))).join('')}
     ${flowPath('', 'batteryToHome', flowHome(units))}
     ${flowPath('', 'gridToHome', flowGrid(ev))}
-    ${ev ? flowPath('', 'ev', flowEvDrop()) : ''}
+    ${ev ? flowPath('', 'ev', flowEvFeed()) : ''}
+  </g>
+
+  <!-- the terrace slab is drawn over the cable, which runs beneath it -->
+  <g class="terrace">
+    ${isoBox(HOUSE.L, TERRACE.y0, 0, TERRACE.d, TERRACE.y1 - TERRACE.y0, TERRACE.h,
+      'var(--ak-door)', 'var(--ak-door-edge)', 'var(--ak-wall-side)')}
   </g>
 
   <g class="chips" id="ak-chips"></g>
@@ -1156,6 +1207,7 @@ const STYLE = `
   --ak-car-roof:#edf2f9; --ak-car-cab:#ccd7e4; --ak-car-trim:#ffffff;
   --ak-car-wheel:#2b323c; --ak-car-rim:#b6c1cf;
   --ak-car-crease:#8a97a8; --ak-car-light:#7fe4ff; --ak-car-tail:#ff6470;
+  --ak-car-side-hi:#c4d0df; --ak-car-arch:#232b36;
   --ak-mast:#b9cbe0; --ak-tree:#4e8570; --ak-trunk:#7b6350; --ak-bush:#69987e;
   --ak-accent:#5cc6e8; --ak-flow:#54b2d7; --ak-flow-idle:#bfd4e4;
   --ak-text:#1b2532; --ak-muted:#7d8fa5; --ak-guide:#a9bcd4;
@@ -1188,6 +1240,7 @@ const STYLE = `
   --ak-car-roof:#a9b5c4; --ak-car-cab:#8794a4; --ak-car-trim:#c8d2de;
   --ak-car-wheel:#161b22; --ak-car-rim:#6e7b8c;
   --ak-car-crease:#4f5967; --ak-car-light:#8fe9ff; --ak-car-tail:#ff5f6b;
+  --ak-car-side-hi:#8795a6; --ak-car-arch:#0d1117;
   --ak-mast:#5b7290; --ak-tree:#3a6558; --ak-trunk:#584739; --ak-bush:#4e7561;
   --ak-accent:#4fb6d8; --ak-flow:#4fb6d8; --ak-flow-idle:#3d556f;
   --ak-text:#e9eff8; --ak-muted:#93a6bd; --ak-guide:#465c7a;
@@ -1244,7 +1297,10 @@ text { fill:var(--ak-text); }
 .car-far { fill:var(--ak-car-far); }
 .car-shell { fill:var(--ak-car-shell); }
 .car-nose { fill:var(--ak-car-nose); }
-.car-side { fill:var(--ak-car-side); }
+.car-side { fill:url(#ak-car-body); }
+.arch { fill:var(--ak-car-arch); }
+.car-shine { fill:none; stroke:#fff; stroke-width:2.5; stroke-linecap:round;
+  stroke-linejoin:round; opacity:.5; }
 .car-roof { fill:var(--ak-car-roof); stroke:var(--ak-car-cab); stroke-width:1.5;
   stroke-linejoin:round; }
 .car-cab { fill:var(--ak-car-cab); }
