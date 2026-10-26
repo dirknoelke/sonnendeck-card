@@ -449,14 +449,14 @@ const SHEAR = 0.09;
 const RAIL_BAT = -3;
 
 /** where the electrical centre of the wall is */
-const WALL_MID = 570;
+const WALL_MID = 548;
 /**
  * The house connection is the hub; three cables meet its underside: the
  * solarbanks from the left, the supply down the middle, the wallbox to the right.
  */
-const CONN_PORT = 17;
-/** the house connection sits at the right end of the wall */
-const CONN_X = 808;
+const CONN_PORT = 12;
+/** the house connection and the wallbox share the stretch of wall between the banks and the corner at x = 853 */
+const CONN_X = 760;
 /** wall mounted devices hang with their underside this far above the foot of the wall */
 const MOUNT = 62;
 
@@ -469,23 +469,23 @@ interface Box {
 }
 
 /** one block of four modules per solarbank, all in a row on the roof */
-const slotPitch = (n: number): number => [0, 0, 190, 150, 100][Math.min(n, 4)];
+const slotPitch = (n: number): number => [0, 0, 190, 130, 92][Math.min(n, 4)];
 const slotX = (i: number, n: number): number => WALL_MID + (i - (n - 1) / 2) * slotPitch(n);
-const blockW = (n: number): number => [0, 190, 176, 136, 86][Math.min(n, 4)];
+const blockW = (n: number): number => [0, 190, 176, 118, 78][Math.min(n, 4)];
 
 const BANK_ASPECT = 365 / 300;
 const bankBox = (i: number, n: number): Box => {
   const x = slotX(i, n);
-  const w = n >= 4 ? 92 : 100;
+  const w = n >= 4 ? 84 : 100;
   return { x, y: baseY(x) - 10, w, h: w * BANK_ASPECT };
 };
 const DOCK_ASPECT = 418 / 420;
 const dockBox = (): Box => ({ x: WALL_MID, y: baseY(WALL_MID) - 8, w: 150, h: 150 * DOCK_ASPECT });
 const CONN_ASPECT = 370 / 300;
-const connBox = (): Box => ({ x: CONN_X, y: baseY(CONN_X) - MOUNT, w: 58, h: 58 * CONN_ASPECT });
+const connBox = (): Box => ({ x: CONN_X, y: baseY(CONN_X) - MOUNT, w: 46, h: 46 * CONN_ASPECT });
 /** the wallbox hangs on the wall beside the garage; its cable holster sticks out to the right */
 const WALLBOX_ASPECT = 241 / 300;
-const wallboxBox = (): Box => ({ x: 877, y: baseY(877) - MOUNT, w: 70, h: 70 * WALLBOX_ASPECT });
+const wallboxBox = (): Box => ({ x: 825, y: baseY(825) - MOUNT, w: 60, h: 60 * WALLBOX_ASPECT });
 
 /** the picture's top left corner in the card, as a matrix that also applies the shear */
 const placeMatrix = (b: Box, naturalW: number): string => {
@@ -520,31 +520,42 @@ const PV_PIC = { w: 360, h: 219 };
  * and sunlit on top, whose opacity follows the input's power.
  */
 const BLOCK_V1 = 0.9;
+/** four systems leave no width for two columns: the modules stack instead */
+const blockGrid = (n: number): { cols: number; rows: number } =>
+  n >= 4 ? { cols: 1, rows: 4 } : { cols: 2, rows: 2 };
+
 const blockLayout = (s: number, n: number) => {
   const c = slotX(s, n);
   const bw = blockW(n);
+  const { cols, rows } = blockGrid(n);
   // solve for the roof coordinate whose bottom edge lands on x = c
   const x0 = (1 - BLOCK_V1) * ROOF.tl[0] + BLOCK_V1 * ROOF.bl[0];
   const run = (1 - BLOCK_V1) * (ROOF.tr[0] - ROOF.tl[0]) + BLOCK_V1 * (ROOF.br[0] - ROOF.bl[0]);
   const uc = (c - x0) / run;
   const du = bw / run;
   const gap = 6;
-  const pw = (bw - gap) / 2;
-  const ph = pw / 1.5;
   const roofH = 180;
-  const vext = (2 * ph + gap) / roofH;
-  return { uc, du, gap: gap / run, vext, v1: BLOCK_V1, gv: gap / roofH, exit: roofAt(uc, BLOCK_V1) };
+  const pw = (bw - gap * (cols - 1)) / cols;
+  // 1.5 is a module's width over its height; on the foreshortened roof the
+  // stacked layout is allowed to run a little flatter
+  const ph = cols === 1 ? Math.min(pw / 1.5, (0.8 * roofH - gap * (rows - 1)) / rows) : pw / 1.5;
+  const vext = (rows * ph + gap * (rows - 1)) / roofH;
+  return {
+    uc, du, cols, rows,
+    gap: gap / run, vext, v1: BLOCK_V1, gv: gap / roofH,
+    exit: roofAt(uc, BLOCK_V1),
+  };
 };
 
 const panelMarkup = (blocks: number): string => {
   let out = '';
   for (let s = 0; s < blocks; s++) {
     const b = blockLayout(s, blocks);
-    const cw = (b.du - b.gap) / 2;
-    const rh = (b.vext - b.gv) / 2;
+    const cw = (b.du - b.gap * (b.cols - 1)) / b.cols;
+    const rh = (b.vext - b.gv * (b.rows - 1)) / b.rows;
     for (let k = 0; k < 4; k++) {
-      const u0 = b.uc - b.du / 2 + (k % 2) * (cw + b.gap);
-      const v0 = b.v1 - b.vext + Math.floor(k / 2) * (rh + b.gv);
+      const u0 = b.uc - b.du / 2 + (k % b.cols) * (cw + b.gap);
+      const v0 = b.v1 - b.vext + Math.floor(k / b.cols) * (rh + b.gv);
       const tl = at(...roofAt(u0, v0));
       const tr = at(...roofAt(u0 + cw, v0));
       const bl = at(...roofAt(u0, v0 + rh));
