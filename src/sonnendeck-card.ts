@@ -445,9 +445,8 @@ const baseY = (x: number): number => 607 + SLOPE * (x - 365);
 /** the devices were drawn steeper than this wall; a shear lays them onto it */
 const SHEAR = 0.09;
 
-/** the AC cables run on the ground, parallel to the foot of the wall */
+/** the AC cable runs on the ground, parallel to the foot of the wall */
 const RAIL_BAT = 16;
-const RAIL_GRID = 34;
 
 /** where the electrical centre of the wall is */
 const WALL_MID = 570;
@@ -628,14 +627,30 @@ const flowHome = (units: number, blocks: number): string => {
   ], 10);
 };
 
-/** the supply cable arrives along the ground from the right and rises into the connection */
+/**
+ * The supply cable leaves the house connection downwards and goes
+ * underground: it simply fades out after a few centimetres.
+ */
+const GRID_STUB = 34;
 const flowGrid = (): string => {
   const cb = connBox();
   const xr = cb.x + 14;
+  return line([at(xr, cb.y + GRID_STUB), at(xr, cb.y - 3)]);
+};
+
+/**
+ * The wallbox is on the house circuit: from the rail, a short run to the
+ * right, parallel to the foot of the wall, then straight up into its underside.
+ */
+const flowEv = (): string => {
+  const cb = connBox();
+  const w = wallboxBox();
+  const x0 = cb.x - 14;
+  const xw = w.x - w.w / 2 + w.w * 0.33;
   return smooth([
-    at(1230, railY(1230, RAIL_GRID)),
-    at(xr, railY(xr, RAIL_GRID)),
-    at(xr, cb.y - 3),
+    at(x0, railY(x0, RAIL_BAT)),
+    at(xw, railY(xw, RAIL_BAT)),
+    at(xw, w.y - 3),
   ], 10);
 };
 
@@ -689,6 +704,14 @@ const sceneMarkup = (blocks: number, units: number, ev: boolean, _evOnDock: bool
     <filter id="ak-cloud" x="-30%" y="-80%" width="160%" height="260%"><feGaussianBlur stdDeviation="15"/></filter>
 
     <!-- the light strip on a solarbank: grey at rest, warm while it discharges -->
+    <!-- the supply cable goes underground: it fades out over its last centimetres -->
+    <linearGradient id="ak-fade-g" gradientUnits="userSpaceOnUse" x1="0" y1="${at(0, connBox().y + 6)[1].toFixed(1)}" x2="0" y2="${at(0, connBox().y + GRID_STUB + 2)[1].toFixed(1)}">
+      <stop offset="0" stop-color="#fff"/><stop offset="1" stop-color="#000"/>
+    </linearGradient>
+    <mask id="ak-fade" maskUnits="userSpaceOnUse" x="0" y="0" width="${VW}" height="1040">
+      <rect x="0" y="0" width="${VW}" height="${at(0, connBox().y + GRID_STUB + 2)[1].toFixed(1)}" fill="#fff"/>
+      <rect x="0" y="${at(0, connBox().y + 6)[1].toFixed(1)}" width="${VW}" height="${(34 * PLACE.s).toFixed(1)}" fill="url(#ak-fade-g)"/>
+    </mask>
     <filter id="ak-f-idle"><feColorMatrix type="saturate" values="0"/></filter>
     <filter id="ak-f-out"><feColorMatrix type="hueRotate" values="-80"/></filter>
   </defs>
@@ -732,7 +755,8 @@ const sceneMarkup = (blocks: number, units: number, ev: boolean, _evOnDock: bool
   <g class="flows ac" fill="none" stroke-width="4" stroke-linecap="round" stroke-linejoin="round">
     ${Array.from({ length: units }, (_, i) => flowPath('', `ac${i}`, flowStub(i, units, blocks))).join('')}
     ${flowPath('', 'batteryToHome', flowHome(units, blocks))}
-    ${flowPath('', 'gridToHome', flowGrid())}
+    <g mask="url(#ak-fade)">${flowPath('', 'gridToHome', flowGrid())}</g>
+    ${ev ? flowPath('', 'ev', flowEv()) : ''}
   </g>
 
   ${ev ? `<g class="tap garage" data-tap="ev"><rect x="${gx0.toFixed(1)}" y="${gy0.toFixed(1)}" width="${(230 * PLACE.s).toFixed(1)}" height="${(230 * PLACE.s).toFixed(1)}" fill="transparent"/></g>` : ''}
@@ -753,10 +777,10 @@ const sceneMarkup = (blocks: number, units: number, ev: boolean, _evOnDock: bool
     <path class="chev" id="ak-solar-chev" d="M247 99 L264 113 L247 127"/>
   </g>
 
-  <g class="tap" data-tap="grid">
+  <g class="tap" data-tap="home">
     <rect x="${RX - 250}" y="18" width="250" height="126" fill="transparent"/>
-    <text class="cap" x="${RX}" y="62" text-anchor="end" id="ak-grid-cap"></text>
-    <text class="val" x="${RX}" y="126" text-anchor="end" id="ak-grid-val"></text>
+    <text class="cap" x="${RX}" y="62" text-anchor="end" id="ak-home-cap"></text>
+    <text class="val" x="${RX}" y="126" text-anchor="end" id="ak-home-val"></text>
   </g>
 
   <g class="tap" data-tap="battery">
@@ -766,10 +790,10 @@ const sceneMarkup = (blocks: number, units: number, ev: boolean, _evOnDock: bool
     <text class="val" x="114" y="996" id="ak-store-val"></text>
   </g>
 
-  <g class="tap" data-tap="home">
+  <g class="tap" data-tap="grid">
     <rect x="${RX - 250}" y="876" width="250" height="148" fill="transparent"/>
-    <text class="cap" x="${RX}" y="920" text-anchor="end" id="ak-home-cap"></text>
-    <text class="val" x="${RX}" y="996" text-anchor="end" id="ak-home-val"></text>
+    <text class="cap" x="${RX}" y="920" text-anchor="end" id="ak-grid-cap"></text>
+    <text class="val" x="${RX}" y="996" text-anchor="end" id="ak-grid-val"></text>
   </g>
 </svg>`;
 };
