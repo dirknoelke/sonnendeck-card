@@ -504,8 +504,8 @@ const bankDisc = (i: number, n: number): { c: Pt; size: number } => ({
   size: bankBox(i, n).w * PLACE.s * 0.2,
 });
 
-/** the charge pills of a combined dock float above it */
-const dockChipAnchor = (): Pt => at(dockBox().x, dockBox().y - dockBox().h - 44);
+/** with a dock, each system's charge sits as a small pill on its own cable, just above the bus */
+const dockChip = (i: number, n: number): Pt => at(slotX(i, n), dockBusY(slotX(i, n)) - 24);
 
 /** the charging-power pill sits above the garage door */
 const evChipAnchor = (): Pt => at(1040, 360);
@@ -601,6 +601,12 @@ const storageMarkup = (units: number, blocks: number): string => {
 
 /* -------------------------------- flows -------------------------------- */
 
+/** with a dock all cables meet on a bus that runs parallel to the foot of the wall */
+const dockBusY = (x: number): number => {
+  const d = dockBox();
+  return d.y - d.h - 20 + SLOPE * (x - d.x);
+};
+
 /** module block -> the solarbank underneath it, or the dock for all of them */
 const flowPv = (s: number, units: number, blocks: number): string => {
   const exit = blockLayout(s, blocks).exit;
@@ -611,11 +617,10 @@ const flowPv = (s: number, units: number, blocks: number): string => {
   }
   // one dock for everything: drop, run along a bus parallel to the wall, drop in
   const d = dockBox();
-  const busY = (x: number): number => d.y - d.h - 20 + SLOPE * (x - d.x);
   return smooth([
     at(...start),
-    at(start[0], busY(start[0])),
-    at(d.x, busY(d.x)),
+    at(start[0], dockBusY(start[0])),
+    at(d.x, dockBusY(d.x)),
     at(d.x, d.y - d.h + 5),
   ], 10);
 };
@@ -1612,22 +1617,23 @@ class SonnendeckCard extends HTMLElement {
     // with a dock the cabinets merge into one, but every storage keeps
     // its own state of charge — so the pills line up above the dock
     const entries = readings.map((r) => ({ soc: r.soc, power: r.battery }));
-    const spread = 82;
 
-    const addPill = (cx: number, cy: number, label: string, minW: number): void => {
-      const w = Math.max(minW, label.length * 16 + 24);
+    const addPill = (cx: number, cy: number, label: string, minW: number, small = false): void => {
+      const w = small ? label.length * 12 + 20 : Math.max(minW, label.length * 16 + 24);
+      const h = small ? 30 : 38;
       const g = document.createElementNS(ns, 'g');
       g.setAttribute('class', 'chip');
       const rect = document.createElementNS(ns, 'rect');
       rect.setAttribute('x', (cx - w / 2).toFixed(1));
-      rect.setAttribute('y', (cy - 20).toFixed(1));
-      rect.setAttribute('rx', '19');
+      rect.setAttribute('y', (cy - h / 2).toFixed(1));
+      rect.setAttribute('rx', String(h / 2));
       rect.setAttribute('width', String(w));
-      rect.setAttribute('height', '38');
+      rect.setAttribute('height', String(h));
       const text = document.createElementNS(ns, 'text');
       text.setAttribute('x', cx.toFixed(1));
-      text.setAttribute('y', (cy + 8).toFixed(1));
+      text.setAttribute('y', (cy + (small ? 7 : 9)).toFixed(1));
       text.setAttribute('text-anchor', 'middle');
+      if (small) text.setAttribute('style', 'font-size:21px');
       text.textContent = label;
       g.append(rect, text);
       host.appendChild(g);
@@ -1637,8 +1643,8 @@ class SonnendeckCard extends HTMLElement {
       if (entry.soc === null && entry.power === null) return;
       const label = fmtPct(entry.soc);
       if (combined && entries.length > 1) {
-        const [dx, dy] = dockChipAnchor();
-        addPill(dx + (i - (entries.length - 1) / 2) * spread, dy, label, 76);
+        const [dx, dy] = dockChip(i, entries.length);
+        addPill(dx, dy, label, 0, true);
         return;
       }
       const { c, size } = bankDisc(i, units);
