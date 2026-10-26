@@ -27,7 +27,7 @@ const EDITOR_NAME = 'sonnendeck-card-editor';
  * stays registered as the same element — nobody has to touch their YAML.
  */
 const LEGACY_NAME = 'anker-solix-flow-card';
-const CARD_VERSION = '0.8.0';
+const CARD_VERSION = '0.9.0';
 
 /* ------------------------------------------------------------------ *
  * Configuration
@@ -140,6 +140,8 @@ export interface SonnendeckCardConfig {
   house?: HouseMeter;
   /** wall charger; set it and the parking bay appears */
   wallbox?: WallboxConfig;
+  /** power at which a module is drawn fully sunlit, in W (default 400) */
+  panel_peak?: number;
   invert_grid?: boolean;
   invert_battery?: boolean;
   animation?: boolean;
@@ -386,47 +388,17 @@ const fmtPct = (v: number | null): string => (v === null ? '–%' : `${Math.roun
 
 
 /* ------------------------------------------------------------------ *
- * Isometric scene
+ * The scene
  *
- * Constructed, not traced. Two ground axes and one vertical axis:
- *
- *   screen = O + x*(1, K) + y*(-1, K) + h*(0, -1)
- *
- *   +x  right and down — the ridge direction
- *   +y  left and down  — the direction the visible roof plane falls in
- *   +h  up
- *
- * Because every point goes through the same projection, the ridge is
- * parallel to the eave by construction, the roof plane can be tiled
- * edge to edge, and everything stands on one ground plane at h = 0.
+ * The house, the roof modules and the devices are pictures; everything
+ * that carries a state (module brightness, charge, cables, readouts) is
+ * drawn on top of them. All positions below are in picture pixels of the
+ * 1172 x 668 house image, and `at` maps them into the card.
  * ------------------------------------------------------------------ */
-
-/** isometric flattening — 0 would be a plan view, 1 a 45° view */
-const K = 0.28;
-/** screen position of the world origin */
-const ORIGIN: [number, number] = [392, 520];
-
-const HOUSE = {
-  L: 470, // ridge length, along x
-  W: 340, // gable width, along y
-  HW: 150, // wall height
-  HR: 180, // ridge above the eave
-  OH: 24, // eave overhang
-  VO: 20, // verge overhang at the gable
-  T: 13, // roof thickness, shown at the eave and the verges
-};
-const PITCH = HOUSE.HR / (HOUSE.W / 2);
-const ROOF_SPAN = HOUSE.W / 2 + HOUSE.OH;
 
 type Pt = [number, number];
 
-const p3 = (x: number, y: number, h: number): Pt => [
-  ORIGIN[0] + x - y,
-  ORIGIN[1] + K * (x + y) - h,
-];
-
 const fp = (p: Pt): string => `${p[0].toFixed(1)} ${p[1].toFixed(1)}`;
-const poly = (pts: Pt[]): string => `M${pts.map(fp).join(' L ')} Z`;
 const line = (pts: Pt[]): string => `M${pts.map(fp).join(' L ')}`;
 
 /**
@@ -453,543 +425,372 @@ const smooth = (pts: Pt[], radius = 18): string => {
   return `${d} L${fp(pts[pts.length - 1])}`;
 };
 
-/** a point on the visible roof plane: t = 0 at the ridge, t = 1 at the eave */
-const roofPt = (x: number, t: number): Pt =>
-  p3(x, HOUSE.W / 2 + t * ROOF_SPAN, HOUSE.HW + HOUSE.HR - t * ROOF_SPAN * PITCH);
+/** the house image, and where it sits in the card */
+const PIC = { w: 1172, h: 668 };
+const VIEW_W = 960;
+const PLACE = { x: 23, y: 265, s: 0.78 };
+const at = (x: number, y: number): Pt => [PLACE.x + x * PLACE.s, PLACE.y + y * PLACE.s];
 
-/** three visible faces of an axis aligned box */
-const isoBox = (
-  x: number,
-  y: number,
-  h: number,
-  dx: number,
-  dy: number,
-  dh: number,
-  top: string,
-  front: string,
-  side: string,
-): string =>
-  `<path d="${poly([p3(x, y, h + dh), p3(x + dx, y, h + dh), p3(x + dx, y + dy, h + dh), p3(x, y + dy, h + dh)])}" fill="${top}"/>` +
-  `<path d="${poly([p3(x + dx, y, h + dh), p3(x + dx, y, h), p3(x + dx, y + dy, h), p3(x + dx, y + dy, h + dh)])}" fill="${side}"/>` +
-  `<path d="${poly([p3(x, y + dy, h + dh), p3(x + dx, y + dy, h + dh), p3(x + dx, y + dy, h), p3(x, y + dy, h)])}" fill="${front}"/>`;
-
-/** soft contact shadow so nothing floats */
-const groundShadow = (x: number, y: number, dx: number, dy: number, o: number): string => {
-  const c = p3(x + dx / 2, y + dy / 2, 0);
-  const r = (dx + dy) / 2 + 14;
-  return `<ellipse cx="${c[0].toFixed(1)}" cy="${c[1].toFixed(1)}" rx="${r.toFixed(1)}" ry="${(r * K * 0.95).toFixed(1)}" fill="var(--ak-shadow)" opacity="${o}"/>`;
+/** the roof plane facing the camera, corners in picture pixels */
+const ROOF = { tl: [192, 82], tr: [868, 8], br: [976, 174], bl: [290, 262] } as const;
+const roofAt = (u: number, v: number): Pt => {
+  const top: Pt = [ROOF.tl[0] + u * (ROOF.tr[0] - ROOF.tl[0]), ROOF.tl[1] + u * (ROOF.tr[1] - ROOF.tl[1])];
+  const bot: Pt = [ROOF.bl[0] + u * (ROOF.br[0] - ROOF.bl[0]), ROOF.bl[1] + u * (ROOF.br[1] - ROOF.bl[1])];
+  return [top[0] + v * (bot[0] - top[0]), top[1] + v * (bot[1] - top[1])];
 };
 
-/** a closed polygon with rounded corners — used for the car's body */
-const smoothPoly = (pts: Pt[], radius = 11): string => {
-  const n = pts.length;
-  let d = '';
-  for (let i = 0; i < n; i++) {
-    const p = pts[i];
-    const a = pts[(i - 1 + n) % n];
-    const b = pts[(i + 1) % n];
-    const da = Math.hypot(p[0] - a[0], p[1] - a[1]);
-    const db = Math.hypot(b[0] - p[0], b[1] - p[1]);
-    if (da < 1 || db < 1) continue;
-    const ra = Math.min(radius, da / 2);
-    const rb = Math.min(radius, db / 2);
-    const s1: Pt = [p[0] + ((a[0] - p[0]) * ra) / da, p[1] + ((a[1] - p[1]) * ra) / da];
-    const e1: Pt = [p[0] + ((b[0] - p[0]) * rb) / db, p[1] + ((b[1] - p[1]) * rb) / db];
-    d += `${d ? ' L' : 'M'}${fp(s1)} Q${fp(p)} ${fp(e1)}`;
-  }
-  return `${d} Z`;
-};
+/** the foot of the long wall rises to the right by this much per pixel */
+const SLOPE = -0.099;
+const baseY = (x: number): number => 607 + SLOPE * (x - 365);
+/** the devices were drawn steeper than this wall; a shear lays them onto it */
+const SHEAR = 0.09;
 
-/* ----------------------------- solar array ----------------------------- */
+/** the AC cable runs along the foot of the wall, on the house's own edge */
+const RAIL_BAT = -3;
 
+/** where the electrical centre of the wall is */
+const WALL_MID = 548;
 /**
- * The array sits on the left of the roof: every cabinet is placed 109 to
- * the right of its column so the cable drops straight down, and that shift
- * has to stay inside the plot. The bare tiles towards the gable are the
- * price, and they read fine.
+ * The house connection is the hub; three cables meet its underside: the
+ * solarbanks from the left, the supply down the middle, the wallbox to the right.
  */
-const ARRAY = { x0: -10, x1: 400, gapX: 24, t0: 0.07, t1: 0.86 };
+const CONN_PORT = 12;
+/** the house connection and the wallbox share the stretch of wall between the banks and the corner at x = 853 */
+const CONN_X = 760;
+/** wall mounted devices hang with their underside this far above the foot of the wall */
+const MOUNT = 62;
 
-/** a module column never gets wider than this, so one system stays readable */
-const MAX_COL_W = 230;
-
-interface BlockRect {
-  x0: number;
-  x1: number;
-  t0: number;
-  t1: number;
+/** a placed picture: x is the centre, y the bottom, in picture pixels */
+interface Box {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
 }
 
-/**
- * Every solarbank gets one block of four modules, and the blocks stand
- * side by side from left to right — never in two rows. The cabinets sit in
- * the same order below, so each cable is a straight drop into its own
- * storage: no sorting, no crossings, nothing to reason about.
- */
-const blockRect = (s: number, n: number): BlockRect => {
-  const available = ARRAY.x1 - ARRAY.x0;
-  const w = Math.min(MAX_COL_W, (available - ARRAY.gapX * (n - 1)) / n);
-  const used = n * w + ARRAY.gapX * (n - 1);
-  const x0 = ARRAY.x0 + (available - used) / 2 + s * (w + ARRAY.gapX);
-  return { x0, x1: x0 + w, t0: ARRAY.t0, t1: ARRAY.t1 };
+/** one block of four modules per solarbank, all in a row on the roof */
+const slotPitch = (n: number): number => [0, 0, 190, 130, 92][Math.min(n, 4)];
+const slotX = (i: number, n: number): number => WALL_MID + (i - (n - 1) / 2) * slotPitch(n);
+const blockW = (n: number): number => [0, 190, 176, 118, 78][Math.min(n, 4)];
+
+const BANK_ASPECT = 365 / 300;
+const bankBox = (i: number, n: number): Box => {
+  const x = slotX(i, n);
+  const w = [0, 78, 78, 72, 64][Math.min(n, 4)];
+  return { x, y: baseY(x) - 10, w, h: w * BANK_ASPECT };
+};
+const DOCK_ASPECT = 418 / 420;
+const dockBox = (): Box => ({ x: WALL_MID, y: baseY(WALL_MID) - 8, w: 150, h: 150 * DOCK_ASPECT });
+const CONN_ASPECT = 370 / 300;
+const connBox = (): Box => ({ x: CONN_X, y: baseY(CONN_X) - MOUNT, w: 46, h: 46 * CONN_ASPECT });
+/** the wallbox hangs on the wall beside the garage; its cable holster sticks out to the right */
+const WALLBOX_ASPECT = 241 / 300;
+const wallboxBox = (): Box => ({ x: 825, y: baseY(825) - MOUNT, w: 60, h: 60 * WALLBOX_ASPECT });
+
+/** the picture's top left corner in the card, as a matrix that also applies the shear */
+const placeMatrix = (b: Box, naturalW: number): string => {
+  const k = (b.w / naturalW) * PLACE.s;
+  const [e, f] = at(b.x - b.w / 2, b.y - b.h - (SHEAR * b.w) / 2);
+  return `matrix(${k.toFixed(4)} ${(SHEAR * k).toFixed(4)} 0 ${k.toFixed(4)} ${e.toFixed(1)} ${f.toFixed(1)})`;
 };
 
-const blockCentre = (s: number, n: number): number => {
-  const r = blockRect(s, n);
-  return (r.x0 + r.x1) / 2;
-};
+/** a point on a placed picture, as relative coordinates (0..1) */
+const onBox = (b: Box, rx: number, ry: number): Pt =>
+  at(b.x - b.w / 2 + rx * b.w, b.y - b.h - (SHEAR * b.w) / 2 + ry * b.h + SHEAR * rx * b.w);
+
+/** the white disc on a solarbank, where its charge is printed */
+const bankDisc = (i: number, n: number): { c: Pt; size: number } => ({
+  c: onBox(bankBox(i, n), 0.637, 0.619),
+  size: bankBox(i, n).w * PLACE.s * 0.2,
+});
+
+/** with a dock, each system's charge sits as a small pill on its own cable, just above the bus */
+const dockChip = (i: number, n: number): Pt => at(slotX(i, n), dockBusY(slotX(i, n)) - 24);
+
+/** the charging-power pill sits above the garage door */
+const evChipAnchor = (): Pt => at(1040, 360);
+
+/** natural size of the module picture */
+const PV_PIC = { w: 360, h: 219 };
 
 /**
- * Four modules per solarbank, one per MPPT input, as a 2x2 block — that
- * keeps the modules close to a real module's proportions instead of
- * stretching them into slats. Inputs that carry nothing are drawn dark,
- * which makes a shaded or disconnected string obvious at a glance.
+ * One block per solarbank, four modules each, one per input. The block's
+ * bottom centre is where its cable leaves, straight down the wall; the
+ * bank stands right below it. Every module is two stacked pictures: dark,
+ * and sunlit on top, whose opacity follows the input's power.
  */
+const BLOCK_V1 = 0.9;
+/** four systems leave no width for two columns: the modules stack instead */
+const blockGrid = (n: number): { cols: number; rows: number } =>
+  n >= 4 ? { cols: 1, rows: 4 } : { cols: 2, rows: 2 };
+
+const blockLayout = (s: number, n: number) => {
+  const c = slotX(s, n);
+  const bw = blockW(n);
+  const { cols, rows } = blockGrid(n);
+  // solve for the roof coordinate whose bottom edge lands on x = c
+  const x0 = (1 - BLOCK_V1) * ROOF.tl[0] + BLOCK_V1 * ROOF.bl[0];
+  const run = (1 - BLOCK_V1) * (ROOF.tr[0] - ROOF.tl[0]) + BLOCK_V1 * (ROOF.br[0] - ROOF.bl[0]);
+  const uc = (c - x0) / run;
+  const du = bw / run;
+  const gap = 6;
+  const roofH = 180;
+  const pw = (bw - gap * (cols - 1)) / cols;
+  // 1.5 is a module's width over its height; on the foreshortened roof the
+  // stacked layout is allowed to run a little flatter
+  const ph = cols === 1 ? Math.min(pw / 1.5, (0.8 * roofH - gap * (rows - 1)) / rows) : pw / 1.5;
+  const vext = (rows * ph + gap * (rows - 1)) / roofH;
+  return {
+    uc, du, cols, rows,
+    gap: gap / run, vext, v1: BLOCK_V1, gv: gap / roofH,
+    exit: roofAt(uc, BLOCK_V1),
+  };
+};
+
 const panelMarkup = (blocks: number): string => {
   let out = '';
   for (let s = 0; s < blocks; s++) {
-    const r = blockRect(s, blocks);
-    const gx = 8;
-    const gt = 0.022;
-    const cw = (r.x1 - r.x0 - gx) / 2;
-    const ch = (r.t1 - r.t0 - gt) / 2;
+    const b = blockLayout(s, blocks);
+    const cw = (b.du - b.gap * (b.cols - 1)) / b.cols;
+    const rh = (b.vext - b.gv * (b.rows - 1)) / b.rows;
     for (let k = 0; k < 4; k++) {
-      const ax = r.x0 + (k % 2) * (cw + gx);
-      const at = r.t0 + Math.floor(k / 2) * (ch + gt);
-      const bx = ax + cw;
-      const bt = at + ch;
-      out += `<g class="pv" data-pv="${s * 4 + k}">`;
-      out += `<path class="pv-face" d="${poly([roofPt(ax, at), roofPt(bx, at), roofPt(bx, bt), roofPt(ax, bt)])}"/>`;
-      out += `<path class="pv-grid" d="${line([roofPt(ax, (at + bt) / 2), roofPt(bx, (at + bt) / 2)])}"/>`;
-      out += `<path class="pv-grid" d="${line([roofPt((ax + bx) / 2, at), roofPt((ax + bx) / 2, bt)])}"/>`;
-      out += `</g>`;
+      const u0 = b.uc - b.du / 2 + (k % b.cols) * (cw + b.gap);
+      const v0 = b.v1 - b.vext + Math.floor(k / b.cols) * (rh + b.gv);
+      const tl = at(...roofAt(u0, v0));
+      const tr = at(...roofAt(u0 + cw, v0));
+      const bl = at(...roofAt(u0, v0 + rh));
+      const m = [
+        (tr[0] - tl[0]) / PV_PIC.w, (tr[1] - tl[1]) / PV_PIC.w,
+        (bl[0] - tl[0]) / PV_PIC.h, (bl[1] - tl[1]) / PV_PIC.h,
+        tl[0], tl[1],
+      ].map((v) => v.toFixed(4)).join(' ');
+      out += `<g class="pv" data-pv="${s * 4 + k}" style="--sun:0">` +
+        `<use href="#ak-art-panel-dark" transform="matrix(${m})"/>` +
+        `<use class="pv-sun" href="#ak-art-panel-sun" transform="matrix(${m})"/></g>`;
     }
   }
   return out;
 };
 
-/* ------------------------------ storages ------------------------------- */
+/** a soft contact shadow, so nothing floats */
+const footShadow = (b: Box): string => {
+  const [cx, cy] = at(b.x + 4, b.y + 2);
+  return `<ellipse cx="${cx.toFixed(1)}" cy="${cy.toFixed(1)}" rx="${(b.w * PLACE.s * 0.62).toFixed(1)}" ry="${(b.w * PLACE.s * 0.13).toFixed(1)}" ` +
+    `fill="var(--ak-shadow)" opacity=".28" filter="url(#ak-soft)"/>`;
+};
 
-const UNIT = { dx: 44, dy: 66, h: 118, yOff: 62 };
-
-/** shift a projected point in screen space — flow routing is schematic */
-const off = (p: Pt, dx: number, dy: number): Pt => [p[0] + dx, p[1] + dy];
-
-const unitY = HOUSE.W + UNIT.yOff;
-
-/**
- * 109 is the offset that makes the drop from the column above land exactly
- * on the cabinet: it cancels the sideways shift the projection adds between
- * the eave and the ground.
- */
-const unitX = (i: number, units: number): number => blockCentre(i, units) + 109;
+/** several systems on one storage means the dock: it stands in the middle of the wall */
+const isDock = (units: number, blocks: number): boolean => units === 1 && blocks > 1;
+const storageBox = (i: number, units: number, blocks: number): Box =>
+  isDock(units, blocks) ? dockBox() : bankBox(i, units);
 
 const storageMarkup = (units: number, blocks: number): string => {
   let out = '';
   for (let i = 0; i < units; i++) {
-    const x = unitX(i, units);
-    const wide = units === 1 && blocks > 1;
-    const dx = wide ? UNIT.dx + 22 : UNIT.dx;
-    out += `<g class="unit" data-unit="${i}">`;
-    out += groundShadow(x, unitY, dx, UNIT.dy, 0.13);
-    out += isoBox(x, unitY, 0, dx, UNIT.dy, UNIT.h,
-      'var(--ak-unit-top)', 'var(--ak-unit-front)', 'var(--ak-unit-side)');
-    out += `<path class="unit-accent" d="${line([
-      p3(x + 8, unitY + UNIT.dy, 14),
-      p3(x + 8, unitY + UNIT.dy, UNIT.h - 22),
-    ])}"/>`;
-    out += `<path class="unit-vent" d="${poly([
-      p3(x + 10, unitY + UNIT.dy, UNIT.h - 16),
-      p3(x + dx - 10, unitY + UNIT.dy, UNIT.h - 16),
-      p3(x + dx - 10, unitY + UNIT.dy, UNIT.h - 26),
-      p3(x + 10, unitY + UNIT.dy, UNIT.h - 26),
-    ])}"/>`;
-    out += `</g>`;
+    const combined = isDock(units, blocks);
+    const b = storageBox(i, units, blocks);
+    const [x0, y0] = at(b.x - b.w / 2, b.y - b.h);
+    out += `<g class="unit${combined ? ' dock' : ''}" data-unit="${i}">` +
+      footShadow(b) +
+      `<use class="unit-img" href="#ak-art-${combined ? 'dock' : 'solarbank'}" transform="${placeMatrix(b, combined ? 420 : 300)}"/>` +
+      `<rect x="${x0.toFixed(1)}" y="${y0.toFixed(1)}" width="${(b.w * PLACE.s).toFixed(1)}" height="${(b.h * PLACE.s).toFixed(1)}" fill="transparent"/>` +
+      `</g>`;
   }
   return out;
 };
 
-const unitFoot = (i: number, units: number): Pt =>
-  p3(unitX(i, units) + UNIT.dx / 2, unitY + UNIT.dy, 0);
-
-/** the state-of-charge pill floats just above its cabinet */
-const chipAnchor = (i: number, units: number): Pt =>
-  off(p3(unitX(i, units) + UNIT.dx / 2, unitY + UNIT.dy, UNIT.h), 0, -36);
-
-/** the AC rail passes in front of the cabinets, a little below their feet */
-/**
- * A point on the AC rail. The cabinets march down-right at the isometric
- * slope, so extending the rail sideways has to follow that same slope —
- * otherwise the stubs stop just short of it or poke through.
- */
-const busPt = (i: number, units: number, dx = 0, dy = 0): Pt =>
-  off(unitFoot(i, units), dx, 46 + dx * K + dy);
-
 /* -------------------------------- flows -------------------------------- */
 
-const METER = { y0: 20, y1: 98, h0: 54, h1: 134 };
-const MAST = { x: 482, y: -56, h: 250 };
-/** with a parking bay the mast moves back to the plot boundary */
-const MAST_EV = { x: 566, y: -132, h: 250 };
-const mastOf = (ev: boolean) => (ev ? MAST_EV : MAST);
-
-/* --------------------------- parking bay --------------------------- */
-
-const PARK = { x0: 528, x1: 772, y0: 34, y1: 212 };
-/**
- * The car is built the way an isometric car actually reads: a lower body
- * swept across the full width, and a greenhouse sitting on top of it, inset
- * on both sides (tumblehome). Both come from a side profile in (length,
- * height) along the car's own axis; sweeping them across the width gives
- * the visible faces without a single hand-placed polygon.
- */
-const CAR = { x: 578, y: 84, dx: 176, dy: 68, belt: 46, roof: 72 };
-/** how far the cabin is inset from the body sides */
-const CAR_TUMBLE = 7;
-
-/** lower body, closed: shoulder line, nose, underside, tail */
-const CAR_BODY: Array<[number, number]> = [
-  [5, 45],
-  [18, 47],
-  [70, 47],
-  [130, 46],
-  [162, 43],
-  [175, 36],
-  [176, 24],
-  [168, 13],
-  [146, 11],
-  [34, 11],
-  [10, 13],
-  [3, 22],
-  [3, 38],
-];
-/** indices 0..5 sweep into the deck, the shoulder ledges and the bonnet */
-const CAR_BODY_TOP = 6;
-/** indices 5..7 sweep into the front face */
-const CAR_BODY_NOSE = 8;
-
-/** the greenhouse, sitting on the shoulder with a short deck behind it */
-const CAR_CAB: Array<[number, number]> = [
-  [20, 47],
-  [40, 61],
-  [66, 71],
-  [92, 73],
-  [118, 71],
-  [134, 60],
-  [148, 47],
-  [148, 41],
-  [20, 41],
-];
-const CAR_CAB_TOP = 7;
-/** the window band, inset so the pillars stay body-coloured */
-const CAR_GLASS: Array<[number, number]> = [
-  [29, 50],
-  [46, 60],
-  [67, 68],
-  [92, 70],
-  [116, 67],
-  [131, 57],
-  [141, 50],
-  [141, 48],
-];
-/** the panoramic roof panel */
-const CAR_ROOF_GLASS: Array<[number, number]> = [
-  [68, 71],
-  [92, 73],
-  [116, 71],
-];
-
-const CAR_WHEELS = [40, 140];
-const WB = { x: 512, y: 196, d: 32, post: 66, box: 46 };
-
-/** where the charging-power pill sits */
-const evChipAnchor = (): Pt =>
-  off(p3(CAR.x + CAR.dx / 2, CAR.y + CAR.dy, CAR.roof), 0, -48);
-
-const CAR_NEAR = CAR.y + CAR.dy;
-const CAR_FAR = CAR.y;
-
-/**
- * How far the body is drawn in from the sides at a given point along its
- * length. A car is widest between the axles and tapers towards both ends;
- * without this the nose is a slab and the tail a brick.
- */
-const carTaper = (x: number): number => {
-  const t = Math.min(1, Math.max(0, Math.min(x, CAR.dx - x) / 46));
-  return 10 * (1 - t) ** 1.6;
+/** with a dock all cables meet on a bus that runs parallel to the foot of the wall */
+const dockBusY = (x: number): number => {
+  const d = dockBox();
+  return d.y - d.h - 20 + SLOPE * (x - d.x);
 };
 
-/** a profile point on one side of the car: +1 near, −1 far */
-const carSide = (p: [number, number], side: 1 | -1, inset = 0): Pt =>
-  p3(CAR.x + p[0], (side > 0 ? CAR_NEAR : CAR_FAR) - side * (carTaper(p[0]) + inset), p[1]);
-
-/** the surface a chain of profile points sweeps out across the car */
-const carBand = (chain: Array<[number, number]>, inset = 0): string =>
-  poly([
-    ...chain.map((p) => carSide(p, 1, inset)),
-    ...chain.map((p) => carSide(p, -1, inset)).reverse(),
-  ]);
-
-const parkingMarkup = (): string => {
-  const bay = poly([
-    p3(PARK.x0, PARK.y0, 0),
-    p3(PARK.x1, PARK.y0, 0),
-    p3(PARK.x1, PARK.y1, 0),
-    p3(PARK.x0, PARK.y1, 0),
-  ]);
-
-  /**
-   * A wheel. A disc standing in the x/h plane projects to an ellipse tilted
-   * by the isometric slope — atan(K) ≈ 15.6° — which is what makes it read
-   * as a wheel rather than a sticker.
-   */
-  const wheel = (x: number, y: number, r: number, cls: string): string => {
-    const c = p3(CAR.x + x, y, r);
-    const a = ((Math.atan(K) * 180) / Math.PI).toFixed(1);
-    return `<g class="${cls}" transform="translate(${fp(c).replace(' ', ' ')}) rotate(${a})">
-      <ellipse rx="${r}" ry="${(r * 0.95).toFixed(1)}" fill="var(--ak-car-wheel)"/>
-      <ellipse rx="${(r * 0.55).toFixed(1)}" ry="${(r * 0.52).toFixed(1)}" fill="var(--ak-car-rim)"/>
-      <ellipse rx="${(r * 0.18).toFixed(1)}" ry="${(r * 0.17).toFixed(1)}" fill="var(--ak-car-wheel)"/>
-    </g>`;
-  };
-
-  const bodyTop = CAR_BODY.slice(0, CAR_BODY_TOP);
-  const bodyNose = CAR_BODY.slice(CAR_BODY_TOP - 1, CAR_BODY_NOSE);
-  const cabTop = CAR_CAB.slice(0, CAR_CAB_TOP);
-
-  /* a light bar drawn across the car at one point of the profile */
-  const bar = (x: number, h: number, inset: number): string =>
-    line([carSide([x, h], -1, inset), carSide([x, h], 1, inset)]);
-
-  return `
-  <path class="bay" d="${bay}"/>
-  ${groundShadow(CAR.x + 12, CAR.y + 4, CAR.dx - 24, CAR.dy - 8, 0.15)}
-  <g class="car" data-tap="ev">
-    ${CAR_WHEELS.map((x) => wheel(x, CAR_FAR + 10, 12, 'wheel-far')).join('')}
-    <path class="car-far" d="${smoothPoly(CAR_BODY.map((p) => carSide(p, -1)), 5)}"/>
-    <path class="car-shell" d="${carBand(bodyTop)}"/>
-    <path class="car-nose" d="${carBand(bodyNose)}"/>
-    <path class="car-roof" d="${carBand(cabTop, CAR_TUMBLE)}"/>
-    <path class="car-glass-top" d="${carBand(CAR_ROOF_GLASS, CAR_TUMBLE + 8)}"/>
-    <path class="car-cab" d="${smoothPoly(CAR_CAB.map((p) => carSide(p, 1, CAR_TUMBLE)), 6)}"/>
-    <path class="car-glass" d="${smoothPoly(CAR_GLASS.map((p) => carSide(p, 1, CAR_TUMBLE)), 5)}"/>
-    <path class="car-pillar" d="${line([
-      carSide([84, 48], 1, CAR_TUMBLE),
-      carSide([84, 69], 1, CAR_TUMBLE),
-    ])}"/>
-    <path class="car-trim" d="${line(cabTop.map((p) => carSide(p, 1, CAR_TUMBLE)))}"/>
-    <path class="car-side" d="${smoothPoly(CAR_BODY.map((p) => carSide(p, 1)), 5)}"/>
-    <path class="car-crease" d="${line([
-      carSide([14, 30], 1),
-      carSide([92, 32], 1),
-      carSide([158, 29], 1),
-    ])}"/>
-    ${CAR_WHEELS.map((x) => wheel(x, CAR_NEAR - carTaper(x) - 1, 15, 'wheel')).join('')}
-    <path class="car-light" d="${bar(175, 29, 5)}"/>
-    <path class="car-tail" d="${line([carSide([4, 34], 1), carSide([19, 38], 1)])}"/>
-  </g>
-  <g class="wallbox" data-tap="ev">
-    ${isoBox(WB.x + 10, WB.y + 10, 0, 12, 12, WB.post, 'var(--ak-unit-top)', 'var(--ak-unit-front)', 'var(--ak-unit-side)')}
-    ${isoBox(WB.x, WB.y, WB.post, WB.d, WB.d, WB.box, 'var(--ak-meter)', 'var(--ak-meter)', 'var(--ak-meter-edge)')}
-    <path class="wb-accent" d="${line([
-      p3(WB.x + 7, WB.y + WB.d, WB.post + 10),
-      p3(WB.x + WB.d - 7, WB.y + WB.d, WB.post + 10),
-    ])}"/>
-  </g>`;
-};
-
-/**
- * The charger cable. On a Power Dock it branches off the AC rail — the dock
- * has its own port for the car, so the feed comes from the same system as
- * everything else. Without a dock it leaves the distribution board like any
- * other house circuit.
- */
-const flowEv = (fromDock: boolean): string =>
-  fromDock
-    ? smooth([
-        p3(HOUSE.L + 36, HOUSE.W + 44, 0), // branch off the rail at its corner
-        p3(WB.x + 16, WB.y + WB.d, 6),
-        p3(WB.x + 16, WB.y + WB.d, WB.post + 16),
-      ])
-    : smooth([
-        p3(HOUSE.L, 44, METER.h0 + 2),
-        p3(HOUSE.L, 44, 12),
-        p3(HOUSE.L + 30, 70, 6),
-        p3(WB.x + 16, WB.y + WB.d, 6),
-        p3(WB.x + 16, WB.y + WB.d, WB.post + 16),
-      ]);
-
-/** module block -> the solarbank underneath it */
+/** module block -> the solarbank underneath it, or the dock for all of them */
 const flowPv = (s: number, units: number, blocks: number): string => {
-  const r = blockRect(s, blocks);
-  const cx = (r.x0 + r.x1) / 2;
-  const target = units === blocks ? s : 0;
-  const top = p3(unitX(target, units) + UNIT.dx / 2, unitY, UNIT.h);
-  const exit = roofPt(cx, r.t1 + 0.05);
-  return smooth([exit, [exit[0], exit[1] + 26], off(top, 0, -4)], 12);
+  const exit = blockLayout(s, blocks).exit;
+  const start: Pt = [exit[0], exit[1] - 2];
+  if (units === blocks) {
+    const b = bankBox(s, units);
+    return line([at(...start), at(b.x, b.y - b.h + 5)]);
+  }
+  // one dock for everything: drop, run along a bus parallel to the wall, drop in
+  const d = dockBox();
+  return smooth([
+    at(...start),
+    at(start[0], dockBusY(start[0])),
+    at(d.x, dockBusY(d.x)),
+    at(d.x, d.y - d.h + 5),
+  ], 10);
+};
+
+const railY = (x: number, off: number): number => baseY(x) + off;
+
+/** a bank's foot down to the rail */
+const flowStub = (i: number, units: number, blocks: number): string => {
+  const b = storageBox(i, units, blocks);
+  return line([at(b.x, b.y - 3), at(b.x, railY(b.x, RAIL_BAT))]);
 };
 
 /**
- * Cabinet i down to the rail. The first stub stops 20 above the rail: the
- * rail's corner starts rounding there, so running all the way down would
- * poke past the bend. The rail is drawn after the stubs and covers the gap.
+ * From the first bank along the rail to the house connection and up into
+ * it. Every run follows an axis of the picture: straight down, or parallel
+ * to the foot of the wall.
  */
-const flowStub = (i: number, units: number): string =>
-  line([off(unitFoot(i, units), 0, -6), busPt(i, units, 0, i === 0 ? -20 : 0)]);
-
-
-
-/** the rail itself, then up the gable to the distribution board */
-const flowHome = (units: number): string => {
-  const last = Math.max(units - 1, 0);
+const flowHome = (units: number, blocks: number): string => {
+  const first = storageBox(0, units, blocks);
+  const cb = connBox();
+  const xr = cb.x - CONN_PORT;
   return smooth([
-    // start up on the first stub, not left of it — a free end sticking out
-    // past the junction reads as a broken cable. 40 of lead-in gives the
-    // corner room for a full radius.
-    busPt(0, units, 0, -40),
-    busPt(0, units),
-    // far enough past the last cabinet that the corner rounding starts
-    // after the junction, not on top of it
-    busPt(last, units, 48),
-    p3(HOUSE.L + 36, HOUSE.W + 44, 0), // round the front corner
-    p3(HOUSE.L + 30, 120, 0), // along the front, past the door
-    p3(HOUSE.L + 30, 112, METER.h0 + 2), // climb beside the board
-    p3(HOUSE.L, 82, METER.h0 + 16), // and in through its lower edge
-  ]);
+    at(first.x, first.y - 3),
+    at(first.x, railY(first.x, RAIL_BAT)),
+    at(xr, railY(xr, RAIL_BAT)),
+    at(xr, cb.y - 3),
+  ], 10);
 };
 
-/** distribution board -> mast */
 /**
- * The service line runs down the mast and along the ground to the house.
- * Anything cutting across from the mast head would clip the roof verge,
- * which is exactly where the two silhouettes meet.
+ * The supply cable leaves the house connection downwards and goes
+ * underground: it simply fades out after a few centimetres.
  */
-const flowGrid = (ev: boolean): string => {
-  const m = mastOf(ev);
-  return smooth([
-    p3(m.x, m.y + 8, m.h - 18), // off the lowest crossarm
-    p3(m.x - 5, m.y + 6, 105), // down the mast, clear of the roof corner
-    p3(HOUSE.L + 40, 40, 110),
-    p3(HOUSE.L, METER.y0 + 12, METER.h1 - 26), // in through the right edge
-  ]);
+const GRID_END = baseY(CONN_X) + 24;
+const flowGrid = (): string => {
+  const cb = connBox();
+  return line([at(cb.x, GRID_END), at(cb.x, cb.y - 3)]);
 };
 
+/**
+ * The wallbox hangs on the same wall right beside the house connection: out of
+ * its bottom on the right, a short run parallel to the foot of the wall, then
+ * straight up into the wallbox's underside.
+ */
+const flowEv = (): string => {
+  const cb = connBox();
+  const w = wallboxBox();
+  const x0 = cb.x + CONN_PORT;
+  const xw = w.x - w.w / 2 + w.w * 0.33;
+  return smooth([
+    at(x0, cb.y - 3),
+    at(x0, cb.y + 11),
+    at(xw, w.y + 11),
+    at(xw, w.y - 3),
+  ], 8);
+};
+
+/**
+ * A cable is four strokes on one path: a soft shadow beneath it, the cable
+ * itself, a thin highlight along its upper edge, and the travelling pulse.
+ */
 const flowPath = (cls: string, key: string, d: string): string =>
-  `<g data-flow="${key}"><path class="flow-base" pathLength="1000" d="${d}"/>` +
+  `<g data-flow="${key}"><path class="flow-case" pathLength="1000" d="${d}"/>` +
+  `<path class="flow-base" pathLength="1000" d="${d}"/>` +
+  `<path class="flow-hi" pathLength="1000" d="${d}"/>` +
   `<path class="flow-dash ${cls}" pathLength="1000" d="${d}"/></g>`;
 
 /* ------------------------------ the scene ------------------------------ */
 
-const sceneMarkup = (blocks: number, units: number, ev: boolean, evOnDock: boolean): string => {
-  const VW = ev ? 1140 : 960;
+const HOUSE_LAYERS = ['day-closed', 'day-car', 'night-closed', 'night-car'];
+
+const sceneMarkup = (blocks: number, units: number, ev: boolean, _evOnDock: boolean): string => {
+  const VW = VIEW_W;
   const RX = VW - 54; // right hand text anchor
-  const G2 = ev ? 846 : 660; // second guide line
+  const G2 = 660; // second guide line
   // the storage caption carries the charge direction in words, so its column
   // needs a little more room than the solar one above it
   const GB = 356;
-  const m = mastOf(ev);
-  const { L, W, HW, HR, OH, VO, T } = HOUSE;
-  const ridgeA = p3(-VO, W / 2, HW + HR);
-  const ridgeB = p3(L + VO, W / 2, HW + HR);
-  const eaveA = roofPt(-VO, 1);
-  const eaveB = roofPt(L + VO, 1);
-  const eaveH = HW - OH * PITCH;
+  const [gx, gy] = at(PIC.w / 2, 640);
+  const [gx0, gy0] = at(930, 360);
+  const cb = connBox();
+  const [cx0, cy0] = at(cb.x - cb.w / 2, cb.y - cb.h);
+  const wb = wallboxBox();
+  const [wx0, wy0] = at(wb.x - wb.w / 2, wb.y - wb.h);
+
+  const defs = Object.entries(ART)
+    .map(([k, href]) => {
+      const nat = k.startsWith('house') ? PIC : k.startsWith('panel') ? PV_PIC
+        : k === 'dock' ? { w: 420, h: 418 } : k === 'wallbox' ? { w: 300, h: 241 } : k === 'connection' ? { w: 300, h: 370 } : { w: 300, h: 365 };
+      return `<image id="ak-art-${k}" width="${nat.w}" height="${nat.h}" href="${href}"/>`;
+    }).join('');
 
   return `
-<svg viewBox="0 0 ${VW} 1040" xmlns="http://www.w3.org/2000/svg">
+<svg viewBox="0 0 ${VW} 1040" xmlns="http://www.w3.org/2000/svg" data-night="0" data-car="0">
   <defs>
-    <linearGradient id="ak-roof" x1="0" y1="0" x2=".5" y2="1">
-      <stop offset="0" stop-color="var(--ak-roof-1)"/><stop offset="1" stop-color="var(--ak-roof-2)"/>
-    </linearGradient>
-    <linearGradient id="ak-pv" x1="0" y1="0" x2=".4" y2="1">
-      <stop offset="0" stop-color="var(--ak-panel-1)"/><stop offset="1" stop-color="var(--ak-panel-2)"/>
-    </linearGradient>
-    <linearGradient id="ak-wall" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0" stop-color="var(--ak-wall-1)"/><stop offset="1" stop-color="var(--ak-wall-2)"/>
-    </linearGradient>
-    <radialGradient id="ak-ground" cx=".45" cy=".45" r=".7">
+    ${defs}
+    <radialGradient id="ak-ground" cx=".5" cy=".5" r=".5">
       <stop offset="0" stop-color="var(--ak-ground-1)" stop-opacity=".85"/>
       <stop offset="1" stop-color="var(--ak-ground-2)" stop-opacity="0"/>
     </radialGradient>
+
+    <!-- soft edges: contact shadows and clouds -->
+    <filter id="ak-soft" x="-40%" y="-200%" width="180%" height="500%"><feGaussianBlur stdDeviation="6"/></filter>
+    <filter id="ak-soft-l" x="-30%" y="-30%" width="160%" height="160%"><feGaussianBlur stdDeviation="22"/></filter>
+    <filter id="ak-cloud" x="-30%" y="-80%" width="160%" height="260%"><feGaussianBlur stdDeviation="15"/></filter>
+
+    <!-- the light strip on a solarbank: grey at rest, warm while it discharges -->
+    <!-- the supply cable goes underground: it fades out over its last centimetres -->
+    <linearGradient id="ak-fade-g" gradientUnits="userSpaceOnUse" x1="0" y1="${at(0, baseY(CONN_X) + 2)[1].toFixed(1)}" x2="0" y2="${at(0, GRID_END + 1)[1].toFixed(1)}">
+      <stop offset="0" stop-color="#fff"/><stop offset="1" stop-color="#000"/>
+    </linearGradient>
+    <mask id="ak-fade" maskUnits="userSpaceOnUse" x="0" y="0" width="${VW}" height="1040">
+      <rect x="0" y="0" width="${VW}" height="${at(0, GRID_END + 1)[1].toFixed(1)}" fill="#fff"/>
+      <rect x="0" y="${at(0, baseY(CONN_X) + 2)[1].toFixed(1)}" width="${VW}" height="${(23 * PLACE.s).toFixed(1)}" fill="url(#ak-fade-g)"/>
+    </mask>
+    <filter id="ak-f-idle"><feColorMatrix type="saturate" values="0"/></filter>
+    <filter id="ak-f-out"><feColorMatrix type="hueRotate" values="-80"/></filter>
   </defs>
 
-  <path d="${poly([p3(-300, -260, 0), p3(L + 320, -260, 0), p3(L + 320, W + 300, 0), p3(-300, W + 300, 0)])}"
-        fill="url(#ak-ground)"/>
+  <ellipse cx="${gx.toFixed(0)}" cy="${(gy + 40).toFixed(0)}" rx="520" ry="150" fill="url(#ak-ground)"/>
 
-  <!-- conifer at the back corner of the plot -->
-  ${groundShadow(-274, -124, 46, 46, 0.09)}
-  <path d="${poly([p3(-258, -104, 0), p3(-244, -104, 0), p3(-244, -104, 62), p3(-258, -104, 62)])}" fill="var(--ak-trunk)"/>
-  <g fill="var(--ak-tree)">
-    <path d="${line([p3(-251, -98, 300), p3(-207, -98, 206), p3(-295, -98, 206)])} Z"/>
-    <path d="${line([p3(-251, -98, 250), p3(-200, -98, 150), p3(-302, -98, 150)])} Z"/>
-    <path d="${line([p3(-251, -98, 196), p3(-193, -98, 92), p3(-309, -98, 92)])} Z"/>
-    <path d="${line([p3(-251, -98, 138), p3(-188, -98, 30), p3(-314, -98, 30)])} Z"/>
+  <!-- a few clouds, so the sky has depth behind the house -->
+  <g class="clouds" filter="url(#ak-cloud)">
+    <ellipse cx="150" cy="96" rx="120" ry="26"/><ellipse cx="236" cy="78" rx="84" ry="30"/><ellipse cx="300" cy="104" rx="90" ry="22"/>
+    <ellipse cx="${VW - 300}" cy="150" rx="140" ry="30"/><ellipse cx="${VW - 200}" cy="130" rx="96" ry="34"/><ellipse cx="${VW - 130}" cy="158" rx="100" ry="24"/>
+    <ellipse cx="${Math.round(VW / 2) - 40}" cy="262" rx="110" ry="22"/><ellipse cx="${Math.round(VW / 2) + 50}" cy="250" rx="80" ry="24"/>
   </g>
 
-  <!-- grid mast, behind the house so the roof overlaps its base -->
-  ${groundShadow(m.x - 14, m.y - 6, 24, 24, 0.08)}
-  <g class="mast" fill="none" stroke-linecap="round">
-    <path d="${line([p3(m.x - 12, m.y - 4, 0), p3(m.x - 4, m.y + 4, m.h + 68)])}"/>
-    <path d="${line([p3(m.x + 12, m.y - 4, 0), p3(m.x + 4, m.y + 4, m.h + 68)])}"/>
-    <path d="${line([p3(m.x - 8, m.y, m.h - 12), p3(m.x + 8, m.y, m.h - 12)])}"/>
-    <path d="${line([p3(m.x - 10, m.y, m.h + 26), p3(m.x + 10, m.y, m.h + 26)])}"/>
-    <path d="${line([p3(m.x - 18, m.y, m.h + 54), p3(m.x + 18, m.y, m.h + 54)])}"/>
+  <!-- a soft shadow all round the foot of the house -->
+  <ellipse cx="${at(600, 600)[0].toFixed(0)}" cy="${at(600, 600)[1].toFixed(0)}" rx="${(PIC.w * PLACE.s * 0.5).toFixed(0)}" ry="46"
+           fill="var(--ak-shadow)" opacity=".2" filter="url(#ak-soft-l)"/>
+
+  <g class="house" transform="translate(${PLACE.x} ${PLACE.y}) scale(${PLACE.s})">
+    ${HOUSE_LAYERS.map((k) => `<use class="house-layer h-${k}" href="#ak-art-house-${k}"/>`).join('')}
   </g>
 
-  <!-- house -->
-  <path d="${poly([p3(0, W, 0), p3(L, W, 0), p3(L, W, HW), p3(0, W, HW)])}" fill="var(--ak-wall-side)"/>
-  <path d="${poly([p3(58, W, 30), p3(178, W, 30), p3(178, W, 94), p3(58, W, 94)])}"
-        fill="var(--ak-window)" stroke="var(--ak-window-edge)" stroke-width="3"/>
-  <path d="${poly([p3(L, 0, 0), p3(L, W, 0), p3(L, W, HW), p3(L, W / 2, HW + HR), p3(L, 0, HW)])}" fill="url(#ak-wall)"/>
-
-  <path d="${poly([p3(L, 108, 0), p3(L, 222, 0), p3(L, 222, 112), p3(L, 108, 112)])}"
-        fill="var(--ak-door)" stroke="var(--ak-door-edge)" stroke-width="3"/>
-  <path d="${line([p3(L, 165, 0), p3(L, 165, 112)])}" stroke="var(--ak-door-edge)" stroke-width="3" fill="none"/>
-
-  <g class="meter">
-    <path d="${poly([p3(L, METER.y0, METER.h0), p3(L, METER.y1, METER.h0), p3(L, METER.y1, METER.h1), p3(L, METER.y0, METER.h1)])}"
-          fill="var(--ak-meter)" stroke="var(--ak-meter-edge)" stroke-width="3"/>
-    <path d="${poly([p3(L, METER.y0 + 17, METER.h0 + 16), p3(L, METER.y1 - 17, METER.h0 + 16), p3(L, METER.y1 - 17, METER.h1 - 34), p3(L, METER.y0 + 17, METER.h1 - 34)])}"
-          fill="var(--ak-meter-face)"/>
-    <path d="${line([p3(L, METER.y0 + 22, METER.h1 - 16), p3(L, METER.y1 - 22, METER.h1 - 16)])}"
-          stroke="var(--ak-meter-edge)" stroke-width="5" fill="none" stroke-linecap="round"/>
-  </g>
-
-  <!-- roof: only the plane facing the camera, plus its edges -->
-  <path d="${poly([ridgeA, ridgeB, eaveB, eaveA])}" fill="url(#ak-roof)"/>
   <g class="pv-array">${panelMarkup(blocks)}</g>
-  <path d="${poly([eaveA, eaveB, p3(L + VO, W + OH, eaveH - T), p3(-VO, W + OH, eaveH - T)])}" fill="var(--ak-eave)"/>
-  <path d="${poly([ridgeA, ridgeB, p3(L + VO, W / 2 - 16, HW + HR - 6), p3(-VO, W / 2 - 16, HW + HR - 6)])}" fill="var(--ak-ridge)"/>
-  <path d="${poly([p3(L + VO, W / 2, HW + HR), p3(L + VO, W + OH, eaveH), p3(L + VO, W + OH, eaveH - T), p3(L + VO, W / 2, HW + HR - T)])}" fill="var(--ak-verge-1)"/>
-  <path d="${poly([p3(L + VO, W / 2, HW + HR), p3(L + VO, -OH, eaveH), p3(L + VO, -OH, eaveH - T), p3(L + VO, W / 2, HW + HR - T)])}" fill="var(--ak-verge-2)"/>
-
-  <!-- shrubs on the ground, front right -->
-  ${groundShadow(580, W + 100, 40, 40, 0.1)}
-  <g fill="var(--ak-bush)">
-    <ellipse cx="${p3(600, W + 120, 16)[0].toFixed(1)}" cy="${p3(600, W + 120, 16)[1].toFixed(1)}" rx="30" ry="23"/>
-    <ellipse cx="${p3(644, W + 158, 12)[0].toFixed(1)}" cy="${p3(644, W + 158, 12)[1].toFixed(1)}" rx="22" ry="17"/>
-  </g>
-
-  <g class="flows dc" fill="none" stroke-width="7" stroke-linecap="round" stroke-linejoin="round">
-    ${Array.from({ length: blocks }, (_, i) => flowPath('', `pv${i}`, flowPv(i, units, blocks))).join('')}
-  </g>
-
-  ${ev ? parkingMarkup() : ''}
 
   <g class="storages">${storageMarkup(units, blocks)}</g>
 
-  <g class="flows ac" fill="none" stroke-width="8" stroke-linecap="round" stroke-linejoin="round">
-    ${Array.from({ length: units }, (_, i) => flowPath('', `ac${i}`, flowStub(i, units))).join('')}
-    ${flowPath('', 'batteryToHome', flowHome(units))}
-    ${flowPath('', 'gridToHome', flowGrid(ev))}
-    ${ev ? flowPath('', 'ev', flowEv(evOnDock)) : ''}
+  <g class="tap" data-tap="grid">
+    <use href="#ak-art-connection" transform="${placeMatrix(cb, 300)}"/>
+    <rect x="${cx0.toFixed(1)}" y="${cy0.toFixed(1)}" width="${(cb.w * PLACE.s).toFixed(1)}" height="${(cb.h * PLACE.s).toFixed(1)}" fill="transparent"/>
   </g>
+
+  ${ev ? `<g class="tap wallbox" data-tap="ev">
+    <use href="#ak-art-wallbox" transform="${placeMatrix(wb, 300)}"/>
+    <rect x="${wx0.toFixed(1)}" y="${wy0.toFixed(1)}" width="${(wb.w * PLACE.s).toFixed(1)}" height="${(wb.h * PLACE.s).toFixed(1)}" fill="transparent"/>
+  </g>` : ''}
+
+  <g class="flows dc" fill="none" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round">
+    ${Array.from({ length: blocks }, (_, i) => flowPath('', `pv${i}`, flowPv(i, units, blocks))).join('')}
+  </g>
+
+  <g class="flows ac" fill="none" stroke-width="4" stroke-linecap="round" stroke-linejoin="round">
+    ${Array.from({ length: units }, (_, i) => flowPath('', `ac${i}`, flowStub(i, units, blocks))).join('')}
+    ${flowPath('', 'batteryToHome', flowHome(units, blocks))}
+    <g mask="url(#ak-fade)">${flowPath('', 'gridToHome', flowGrid())}</g>
+    ${ev ? flowPath('', 'ev', flowEv()) : ''}
+  </g>
+
+  ${ev ? `<g class="tap garage" data-tap="ev"><rect x="${gx0.toFixed(1)}" y="${gy0.toFixed(1)}" width="${(230 * PLACE.s).toFixed(1)}" height="${(230 * PLACE.s).toFixed(1)}" fill="transparent"/></g>` : ''}
 
   <g class="chips" id="ak-chips"></g>
 
   <g class="guides">
     <path d="M300 14 V150"/><path d="M${G2} 14 V150"/>
     <path d="M${GB} 872 V1024"/><path d="M${G2} 872 V1024"/>
+    <circle cx="300" cy="150" r="5"/><circle cx="${G2}" cy="150" r="5"/>
+    <circle cx="${GB}" cy="872" r="5"/><circle cx="${G2}" cy="872" r="5"/>
   </g>
 
   <g class="tap" data-tap="solar">
@@ -1028,25 +829,8 @@ const STYLE = `
 :host {
   --ak-sky-1:#cbe1fe; --ak-sky-2:#d8e9fd; --ak-sky-3:#e4f0fe; --ak-sky-4:#eaf3fe;
   --ak-ground-1:#ffffff; --ak-ground-2:#cfe0f5; --ak-shadow:#3b567a;
-  --ak-roof-1:#7396bd; --ak-roof-2:#56789f;
-  --ak-panel-1:#4a6591; --ak-panel-2:#39527c;
-  --ak-panel-edge:#c3d3e6; --ak-panel-grid:#a8bdd8;
-  --ak-panel-off-1:#8b9aad; --ak-panel-off-2:#78879b;
-  --ak-eave:#3d5a80; --ak-ridge:#3a5680;
-  --ak-verge-1:#33456a; --ak-verge-2:#2b3a5a;
-  --ak-wall-1:#ffffff; --ak-wall-2:#eef3fa; --ak-wall-side:#dfe8f3;
-  --ak-window:#cfdcec; --ak-window-edge:#c2d1e4;
-  --ak-door:#f7fafd; --ak-door-edge:#dde7f2;
-  --ak-meter:#ffffff; --ak-meter-edge:#d5e0ee; --ak-meter-face:#3d4652;
-  --ak-unit-top:#95a0ad; --ak-unit-front:#79838f; --ak-unit-side:#4c545e;
-  --ak-unit-vent:#2b323a;
-  --ak-bay:#dfe8f4; --ak-bay-line:#c3d3e6;
-  --ak-car-shell:#dde6f1; --ak-car-nose:#b7c4d4; --ak-car-side:#a3b2c4;
-  --ak-car-far:#7c8b9e; --ak-car-glass:#2f3c4e; --ak-car-glass-2:#3b4a5e;
-  --ak-car-roof:#edf2f9; --ak-car-cab:#ccd7e4; --ak-car-trim:#ffffff;
-  --ak-car-wheel:#2b323c; --ak-car-rim:#b6c1cf;
-  --ak-car-crease:#8a97a8; --ak-car-light:#7fe4ff; --ak-car-tail:#ff6470;
-  --ak-mast:#b9cbe0; --ak-tree:#4e8570; --ak-trunk:#7b6350; --ak-bush:#69987e;
+  --ak-cloud:#ffffff; --ak-cloud-o:.6;
+  --ak-case:#2b3d57; --ak-case-o:.20; --ak-flow-hi:#ffffff;
   --ak-accent:#5cc6e8; --ak-flow:#54b2d7; --ak-flow-idle:#bfd4e4;
   --ak-text:#1b2532; --ak-muted:#7d8fa5; --ak-guide:#a9bcd4;
   --ak-chip-bg:#ffffff; --ak-chip-fg:#39516d;
@@ -1056,25 +840,8 @@ const STYLE = `
 :host([dark]) {
   --ak-sky-1:#18222f; --ak-sky-2:#1d2836; --ak-sky-3:#22303f; --ak-sky-4:#1b2532;
   --ak-ground-1:#2c3d52; --ak-ground-2:#1b2532; --ak-shadow:#05080d;
-  --ak-roof-1:#4b6a90; --ak-roof-2:#365070;
-  --ak-panel-1:#33496e; --ak-panel-2:#263957;
-  --ak-panel-edge:#7d93b3; --ak-panel-grid:#64799a;
-  --ak-panel-off-1:#4c5768; --ak-panel-off-2:#3f4a59;
-  --ak-eave:#2a3f5b; --ak-ridge:#293d5b;
-  --ak-verge-1:#232e47; --ak-verge-2:#1c2439;
-  --ak-wall-1:#c6d2e2; --ak-wall-2:#adbccf; --ak-wall-side:#93a4bb;
-  --ak-window:#8fa3bd; --ak-window-edge:#7d92ad;
-  --ak-door:#cfd9e7; --ak-door-edge:#a9b8cb;
-  --ak-meter:#dbe3ef; --ak-meter-edge:#a5b4c7; --ak-meter-face:#2b3542;
-  --ak-unit-top:#727d8a; --ak-unit-front:#5b646f; --ak-unit-side:#363d46;
-  --ak-unit-vent:#1b2027;
-  --ak-bay:#2a3646; --ak-bay-line:#3d4c60;
-  --ak-car-shell:#98a4b3; --ak-car-nose:#74808f; --ak-car-side:#64707e;
-  --ak-car-far:#454e5b; --ak-car-glass:#1c2430; --ak-car-glass-2:#26313f;
-  --ak-car-roof:#a9b5c4; --ak-car-cab:#8794a4; --ak-car-trim:#c8d2de;
-  --ak-car-wheel:#161b22; --ak-car-rim:#6e7b8c;
-  --ak-car-crease:#4f5967; --ak-car-light:#8fe9ff; --ak-car-tail:#ff5f6b;
-  --ak-mast:#5b7290; --ak-tree:#3a6558; --ak-trunk:#584739; --ak-bush:#4e7561;
+  --ak-cloud:#4a5f7a; --ak-cloud-o:.16;
+  --ak-case:#000000; --ak-case-o:.38; --ak-flow-hi:#ffffff;
   --ak-accent:#4fb6d8; --ak-flow:#4fb6d8; --ak-flow-idle:#3d556f;
   --ak-text:#e9eff8; --ak-muted:#93a6bd; --ak-guide:#465c7a;
   --ak-chip-bg:#243244; --ak-chip-fg:#c8d8ea;
@@ -1113,49 +880,44 @@ text { fill:var(--ak-text); }
          stroke-linecap:round; stroke-linejoin:round; }
 .arrow.idle { stroke:var(--ak-muted); }
 .guides path { stroke:var(--ak-guide); stroke-width:2.5; stroke-dasharray:3 9; fill:none; }
+.guides circle { fill:var(--ak-guide); }
 .tap { cursor:pointer; }
 .tap:hover .val { opacity:.75; }
 .tap.dead { cursor:default; }
 .tap.dead:hover .val { opacity:1; }
 
-.mast path { stroke:var(--ak-mast); stroke-width:4.5; }
-.unit-accent { stroke:var(--ak-accent); stroke-width:7; stroke-linecap:round; }
-.unit.idle .unit-accent { stroke:var(--ak-flow-idle); }
-.unit { cursor:pointer; }
-.unit-vent { fill:var(--ak-unit-vent); }
-.bay { fill:var(--ak-bay); stroke:var(--ak-bay-line); stroke-width:3; stroke-dasharray:14 12; }
-.car, .wallbox { cursor:pointer; }
-.wb-accent { stroke:var(--ak-flow-idle); stroke-width:6; stroke-linecap:round; }
-.car-far { fill:var(--ak-car-far); }
-.car-shell { fill:var(--ak-car-shell); }
-.car-nose { fill:var(--ak-car-nose); }
-.car-side { fill:var(--ak-car-side); }
-.car-roof { fill:var(--ak-car-roof); stroke:var(--ak-car-cab); stroke-width:1.5;
-  stroke-linejoin:round; }
-.car-cab { fill:var(--ak-car-cab); }
-.car-glass { fill:var(--ak-car-glass); }
-.car-pillar { fill:none; stroke:var(--ak-car-cab); stroke-width:4.5; stroke-linecap:round; }
-.car-glass-top { fill:var(--ak-car-glass-2); }
-.car-trim { fill:none; stroke:var(--ak-car-trim); stroke-width:2;
-  stroke-linecap:round; stroke-linejoin:round; opacity:.55; }
-.car-crease { fill:none; stroke:var(--ak-car-crease); stroke-width:2.5;
-  stroke-linecap:round; stroke-linejoin:round; opacity:.55; }
-.car-light { stroke:var(--ak-car-light); stroke-width:5; stroke-linecap:round; }
-.car-tail { stroke:var(--ak-car-tail); stroke-width:4; stroke-linecap:round; opacity:.85; }
-.wheel ellipse, .wheel-far ellipse { stroke:none; }
-.wheel-far { opacity:.75; }
-.wallbox.charging .wb-accent { stroke:var(--ak-accent); }
+/* the picture: the house swaps with the time of day and with the car */
+.house-layer { opacity:0; transition:opacity .6s ease; }
+svg[data-night="0"][data-car="0"] .h-day-closed,
+svg[data-night="0"][data-car="1"] .h-day-car,
+svg[data-night="1"][data-car="0"] .h-night-closed,
+svg[data-night="1"][data-car="1"] .h-night-car { opacity:1; }
 
-.pv-face { fill:url(#ak-pv); stroke:var(--ak-panel-edge); stroke-width:3; }
-.pv-grid { stroke:var(--ak-panel-grid); stroke-width:2; fill:none; }
-.pv.off .pv-face { fill:var(--ak-panel-off-1); stroke:var(--ak-panel-off-2); }
-.pv.off .pv-grid { stroke:var(--ak-panel-off-2); }
+/* every module is two pictures: dark, and sunlit on top at the input's power */
+.pv { cursor:pointer; }
+.pv-sun { opacity:var(--sun,0); transition:opacity .6s ease; }
+
+.unit { cursor:pointer; }
+.unit.idle .unit-img { filter:url(#ak-f-idle); }
+.unit:not(.charging):not(.idle) .unit-img { filter:url(#ak-f-out); }
+.garage { cursor:pointer; }
 
 .chip rect { fill:var(--ak-chip-bg); opacity:.92; }
 .chip text { font-size:26px; font-weight:600; fill:var(--ak-chip-fg); }
+/* the charge of a solarbank is printed on its own white disc */
+.chip.disc text { fill:#2b3d57; font-weight:700; }
 
-.flow-base { stroke:var(--ak-flow-idle); opacity:.5; }
+.clouds ellipse { fill:var(--ak-cloud); opacity:var(--ak-cloud-o); }
+
+/* a cable is a thin conduit with its own shadow; it takes the flow colour
+   only while energy actually moves through it */
+.flow-case { stroke:var(--ak-case); opacity:var(--ak-case-o); transform:translate(0,3px); }
+.flows.dc .flow-case { stroke-width:6.4px; }
+.flows.ac .flow-case { stroke-width:7.6px; }
+.flow-base { stroke:var(--ak-flow-idle); opacity:.95; }
+.flow-hi { stroke:var(--ak-flow-hi); stroke-width:1.2px; opacity:.0; transform:translate(-.8px,-1.1px); }
 [data-flow].on .flow-base, [data-spur].on .flow-base { stroke:var(--ak-flow); opacity:1; }
+[data-flow].on .flow-hi { opacity:.38; }
 /* pathLength normalises every run to 1000 units, so a single pulse
    travels the whole line at the same speed no matter how long it is */
 .flow-dash { stroke:#ffffff; opacity:0; stroke-dasharray:70 930; }
@@ -1789,16 +1551,23 @@ class SonnendeckCard extends HTMLElement {
     });
 
     /* per module state */
+    const peak = Math.max(cfg.panel_peak ?? 400, 1);
     this._root.querySelectorAll<SVGGElement>('g[data-pv]').forEach((g) => {
       const v = inputs[Number(g.dataset.pv)]?.value;
-      g.classList.toggle('off', v === null || v <= EPS);
+      const on = v !== null && v !== undefined && v > EPS;
+      g.classList.toggle('off', !on);
+      g.style.setProperty('--sun', on ? Math.min(1, v / peak).toFixed(2) : '0');
     });
+
+    /* the picture: night with a dark theme, the car in the garage while it charges */
+    const svg = this._root.querySelector('svg');
+    if (svg) {
+      svg.dataset.night = dark ? '1' : '0';
+      svg.dataset.car = ev && (evPower ?? 0) > EPS ? '1' : '0';
+    }
 
     /* per storage chips, plus the charger */
     this._paintChips(readings, combined, units, evPower);
-    this._root.querySelectorAll<SVGGElement>('g.car, g.wallbox').forEach((g) => {
-      g.classList.toggle('charging', (evPower ?? 0) > EPS);
-    });
 
     /* flows */
     const states: Record<string, { active: boolean; reverse: boolean }> = {
@@ -1848,52 +1617,52 @@ class SonnendeckCard extends HTMLElement {
     // with a dock the cabinets merge into one, but every storage keeps
     // its own state of charge — so the pills line up above the dock
     const entries = readings.map((r) => ({ soc: r.soc, power: r.battery }));
-    const spread = 82;
-    const [dockX, dockY] = chipAnchor(0, units);
 
-    entries.forEach((entry, i) => {
-      if (entry.soc === null && entry.power === null) return;
-      const [cx, cy] = combined
-        ? [dockX + (i - (entries.length - 1) / 2) * spread, dockY]
-        : chipAnchor(i, units);
-      const label = fmtPct(entry.soc);
-      const w = Math.max(76, label.length * 16 + 24);
+    const addPill = (cx: number, cy: number, label: string, minW: number, small = false): void => {
+      const w = small ? label.length * 12 + 20 : Math.max(minW, label.length * 16 + 24);
+      const h = small ? 30 : 38;
       const g = document.createElementNS(ns, 'g');
       g.setAttribute('class', 'chip');
       const rect = document.createElementNS(ns, 'rect');
       rect.setAttribute('x', (cx - w / 2).toFixed(1));
-      rect.setAttribute('y', (cy - 20).toFixed(1));
-      rect.setAttribute('rx', '19');
+      rect.setAttribute('y', (cy - h / 2).toFixed(1));
+      rect.setAttribute('rx', String(h / 2));
       rect.setAttribute('width', String(w));
-      rect.setAttribute('height', '38');
+      rect.setAttribute('height', String(h));
       const text = document.createElementNS(ns, 'text');
       text.setAttribute('x', cx.toFixed(1));
-      text.setAttribute('y', (cy + 8).toFixed(1));
+      text.setAttribute('y', (cy + (small ? 7 : 9)).toFixed(1));
       text.setAttribute('text-anchor', 'middle');
+      if (small) text.setAttribute('style', 'font-size:21px');
       text.textContent = label;
       g.append(rect, text);
+      host.appendChild(g);
+    };
+
+    entries.forEach((entry, i) => {
+      if (entry.soc === null && entry.power === null) return;
+      const label = fmtPct(entry.soc);
+      if (combined && entries.length > 1) {
+        const [dx, dy] = dockChip(i, entries.length);
+        addPill(dx, dy, label, 0, true);
+        return;
+      }
+      const { c, size } = bankDisc(i, units);
+      const g = document.createElementNS(ns, 'g');
+      g.setAttribute('class', 'chip disc');
+      const text = document.createElementNS(ns, 'text');
+      text.setAttribute('x', c[0].toFixed(1));
+      text.setAttribute('y', (c[1] + size * 0.36).toFixed(1));
+      text.setAttribute('text-anchor', 'middle');
+      text.setAttribute('style', `font-size:${size.toFixed(1)}px`);
+      text.textContent = label;
+      g.appendChild(text);
       host.appendChild(g);
     });
 
     if (evPower !== null && Math.abs(evPower) > EPS) {
       const [cx, cy] = evChipAnchor();
-      const label = fmtPower(Math.abs(evPower), Math.max(this._config?.kw_threshold ?? 0, 1000));
-      const w = Math.max(84, label.length * 16 + 24);
-      const g = document.createElementNS(ns, 'g');
-      g.setAttribute('class', 'chip');
-      const rect = document.createElementNS(ns, 'rect');
-      rect.setAttribute('x', (cx - w / 2).toFixed(1));
-      rect.setAttribute('y', (cy - 20).toFixed(1));
-      rect.setAttribute('rx', '19');
-      rect.setAttribute('width', String(w));
-      rect.setAttribute('height', '38');
-      const text = document.createElementNS(ns, 'text');
-      text.setAttribute('x', cx.toFixed(1));
-      text.setAttribute('y', (cy + 8).toFixed(1));
-      text.setAttribute('text-anchor', 'middle');
-      text.textContent = label;
-      g.append(rect, text);
-      host.appendChild(g);
+      addPill(cx, cy, fmtPower(Math.abs(evPower), Math.max(this._config?.kw_threshold ?? 0, 1000)), 84);
     }
   }
 

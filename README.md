@@ -1,8 +1,10 @@
 # Sonnendeck
 
 Eine Lovelace-Karte für Home Assistant, die den Energiefluss eines Haushalts als ein
-Bild zeigt: isometrisches Haus, PV-Module auf dem Dach, Speicher im Sockelgeschoss,
-Zählerkasten, Strommast, Wallbox — mit animierten Flusslinien.
+Bild zeigt: ein Haus mit PV-Modulen auf dem Dach, Solarbanks an der Wand,
+Hausanschluss und Garage mit Wallbox — mit animierten Flusslinien. Haus und Geräte sind
+Bilder (Tag und Nacht, Auto in der Garage oder unterwegs), alles, was einen Zustand
+trägt, liegt als Vektor darüber.
 
 Gebaut für Balkonkraftwerke mit Speicher, insbesondere für **Anker SOLIX** über die
 [anker_solix](https://github.com/thomluther/ha-anker-solix)-Integration; mit manuell
@@ -15,10 +17,11 @@ von Hardware, die später dazukommt, etwa eine zweite Solarbank oder ein Power D
 **Alle Systeme in einem Bild.** Die App zeigt immer nur ein System, weil sie muss.
 Hier steht ein Haus für den ganzen Haushalt: jede Solarbank bekommt ihren eigenen
 Block aus vier Modulen auf dem Dach — einen je MPPT-Eingang — und darunter ihren
-eigenen Speicher mit Ladestand. Die Blöcke stehen **immer nebeneinander**, und jeder
+eigenen Speicher mit Ladestand auf der Scheibe. Die Blöcke stehen **immer nebeneinander**, und jeder
 Speicher steht genau unter seinem Block — damit ist jedes Kabel ein senkrechter
-Strich in die richtige Batterie, ohne Kreuzungen und ohne Nachdenken. Eingänge ohne Ertrag werden abgedunkelt, ein
-verschatteter oder abgeklemmter String fällt also sofort auf. Kommt ein **Power
+Strich in die richtige Batterie, ohne Kreuzungen und ohne Nachdenken. Jedes Modul wird je nach Leistung seines Eingangs heller oder dunkler (volle Sonne ab
+`panel_peak`, Standard 400 W), ein verschatteter oder abgeklemmter String fällt also
+sofort auf. Kommt ein **Power
 Dock** dazu, verschmelzen die Speicher zu einem Gerät und die Ladestände wandern
 als Reihe darüber.
 
@@ -45,7 +48,7 @@ oder Template-Sensoren.
 (Einstellungen → Dashboards → ⋮ → Ressourcen, erweiterter Modus muss an sein):
 
 ```yaml
-url: /local/sonnendeck-card.js?v=0.8.0
+url: /local/sonnendeck-card.js?v=0.9.0
 type: module
 ```
 
@@ -81,7 +84,8 @@ systems:
 | `title`          | string   | –        | Optionale Überschrift über der Grafik |
 | `dock`           | string   | –        | Geräte-ID des Power Docks. Gesetzt heißt: ein Speicher statt vier |
 | `house`          | map      | –        | Hauszähler, siehe unten. Gewinnt gegen die Werte aus den Systemen |
-| `wallbox`        | map      | –        | Wandladestation, siehe unten. Gesetzt heißt: Stellplatz und Auto im Bild |
+| `wallbox`        | map      | –        | Wandladestation, siehe unten. Gesetzt heißt: Garage mit Wallbox, das Auto steht drin, solange es lädt |
+| `panel_peak`     | number   | `400`    | Leistung eines Eingangs in W, ab der sein Modul voll sonnig gezeichnet wird |
 | `house.load`     | string   | –        | Optional. Ohne Angabe wird die Hauslast aus der Bilanz berechnet |
 | `combine`        | map      | –        | `grid` und `home`: `primary` (Standard) oder `sum`, siehe unten |
 | `storage_display`| string   | `auto`   | `units` je System ein Speicher, `combined` einer für alle, `auto` schaltet um sobald ein Power Dock da ist |
@@ -366,3 +370,11 @@ MIT — siehe [LICENSE](LICENSE).
 Anker Innovations und wird von dort weder betrieben noch unterstützt oder geprüft.
 „Anker" und „SOLIX" sind Marken von Anker Innovations und werden hier ausschließlich
 genannt, um zu beschreiben, mit welcher Hardware die Karte zusammenarbeitet.
+
+## Bilder
+
+Haus und Geräte liegen als WebP in `art/` und werden mit `npm run art` in
+`src/art.ts` eingebettet, damit die Karte eine einzige Datei bleibt (`npm run build`
+fügt beides zusammen). Ein Bild tauschen: Datei in `art/` ersetzen, `npm run art`,
+`npm run build`. Die vier Hausbilder müssen denselben Ausschnitt haben, die zwei
+Modulbilder (dunkel und sonnig) ebenfalls.
