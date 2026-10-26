@@ -28,23 +28,31 @@ const states = {
 };
 
 const card = document.getElementById('c');
+// ?n=1..4 systems, ?dock for one combined dock, ?noev without wallbox, ?idle for a sleeping car
+const n = Math.min(4, Math.max(1, Number(p.get('n') ?? 2)));
+const names = ['Dach', 'Garten', 'Carport', 'Scheune'];
+const systems = names.slice(0, n).map((name, i) => {
+  const k = ['dach', 'garten', 'carport', 'scheune'][i];
+  if (i >= 2) {
+    [480, 120, 360, 0].forEach((w, j) => (states[`sensor.${k}_pv${j + 1}`] = num(w)));
+    states[`sensor.${k}_soc`] = num(30 + i * 20, '%');
+    states[`sensor.${k}_bat`] = num(200);
+    states[`sensor.${k}_out`] = num(500);
+  }
+  return { name, entities: {
+    solar_1: `sensor.${k}_pv1`, solar_2: `sensor.${k}_pv2`,
+    solar_3: `sensor.${k}_pv3`, solar_4: `sensor.${k}_pv4`,
+    battery_soc: `sensor.${k}_soc`, battery_power: `sensor.${k}_bat`,
+    output: `sensor.${k}_out` } };
+});
+if (p.has('idle')) states['sensor.wallbox'] = num(0);
 card.setConfig({
   type: 'custom:sonnendeck-card',
   title: 'Solaranlagen',
-  systems: [
-    { name: 'Dach', entities: {
-      solar_1: 'sensor.dach_pv1', solar_2: 'sensor.dach_pv2',
-      solar_3: 'sensor.dach_pv3', solar_4: 'sensor.dach_pv4',
-      battery_soc: 'sensor.dach_soc', battery_power: 'sensor.dach_bat',
-      output: 'sensor.dach_out' } },
-    { name: 'Garten', entities: {
-      solar_1: 'sensor.garten_pv1', solar_2: 'sensor.garten_pv2',
-      solar_3: 'sensor.garten_pv3', solar_4: 'sensor.garten_pv4',
-      battery_soc: 'sensor.garten_soc', battery_power: 'sensor.garten_bat',
-      output: 'sensor.garten_out' } },
-  ],
+  systems,
+  ...(p.has('dock') ? { storage_display: 'combined' } : {}),
   house: { grid_import: 'sensor.sml_in', grid_export: 'sensor.sml_out' },
-  wallbox: { power: 'sensor.wallbox' },
+  ...(p.has('noev') ? {} : { wallbox: { power: 'sensor.wallbox' } }),
 });
 card.hass = {
   states,

@@ -4,7 +4,8 @@
   "description": "Home Assistant Lovelace card: an isometric picture of generation, storage, house load and wallbox",
   "type": "module",
   "scripts": {
-    "build": "tsc -p tsconfig.json",
+    "art": "node tools/embed-art.mjs",
+    "build": "tsc -p tsconfig.json && node tools/bundle.mjs",
     "watch": "tsc -p tsconfig.json --watch",
     "lint": "tsc -p tsconfig.json --noEmit"
   },
