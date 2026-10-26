@@ -445,8 +445,8 @@ const baseY = (x: number): number => 607 + SLOPE * (x - 365);
 /** the devices were drawn steeper than this wall; a shear lays them onto it */
 const SHEAR = 0.09;
 
-/** the AC cable runs on the ground, parallel to the foot of the wall */
-const RAIL_BAT = 16;
+/** the AC cable runs along the foot of the wall, on the house's own edge */
+const RAIL_BAT = -3;
 
 /** where the electrical centre of the wall is */
 const WALL_MID = 570;
@@ -456,7 +456,9 @@ const WALL_MID = 570;
  */
 const CONN_PORT = 17;
 /** the house connection sits at the right end of the wall */
-const CONN_X = 800;
+const CONN_X = 808;
+/** wall mounted devices hang with their underside this far above the foot of the wall */
+const MOUNT = 62;
 
 /** a placed picture: x is the centre, y the bottom, in picture pixels */
 interface Box {
@@ -480,10 +482,10 @@ const bankBox = (i: number, n: number): Box => {
 const DOCK_ASPECT = 418 / 420;
 const dockBox = (): Box => ({ x: WALL_MID, y: baseY(WALL_MID) - 8, w: 150, h: 150 * DOCK_ASPECT });
 const CONN_ASPECT = 370 / 300;
-const connBox = (): Box => ({ x: CONN_X, y: baseY(CONN_X) - 4, w: 58, h: 58 * CONN_ASPECT });
+const connBox = (): Box => ({ x: CONN_X, y: baseY(CONN_X) - MOUNT, w: 58, h: 58 * CONN_ASPECT });
 /** the wallbox hangs on the wall beside the garage; its cable holster sticks out to the right */
 const WALLBOX_ASPECT = 241 / 300;
-const wallboxBox = (): Box => ({ x: 877, y: baseY(877) - 64, w: 70, h: 70 * WALLBOX_ASPECT });
+const wallboxBox = (): Box => ({ x: 877, y: baseY(877) - MOUNT, w: 70, h: 70 * WALLBOX_ASPECT });
 
 /** the picture's top left corner in the card, as a matrix that also applies the shear */
 const placeMatrix = (b: Box, naturalW: number): string => {
@@ -625,7 +627,7 @@ const flowHome = (units: number, blocks: number): string => {
   const cb = connBox();
   const xr = cb.x - CONN_PORT;
   return smooth([
-    at(first.x, railY(first.x, RAIL_BAT) - 28),
+    at(first.x, first.y - 3),
     at(first.x, railY(first.x, RAIL_BAT)),
     at(xr, railY(xr, RAIL_BAT)),
     at(xr, cb.y - 3),
@@ -636,16 +638,16 @@ const flowHome = (units: number, blocks: number): string => {
  * The supply cable leaves the house connection downwards and goes
  * underground: it simply fades out after a few centimetres.
  */
-const GRID_STUB = 34;
+const GRID_END = baseY(CONN_X) + 24;
 const flowGrid = (): string => {
   const cb = connBox();
-  return line([at(cb.x, cb.y + GRID_STUB), at(cb.x, cb.y - 3)]);
+  return line([at(cb.x, GRID_END), at(cb.x, cb.y - 3)]);
 };
 
 /**
- * The wallbox hangs on the house connection like everything else: out of its
- * bottom on the right, a run parallel to the foot of the wall, then straight up
- * into the wallbox's underside.
+ * The wallbox hangs on the same wall right beside the house connection: out of
+ * its bottom on the right, a short run parallel to the foot of the wall, then
+ * straight up into the wallbox's underside.
  */
 const flowEv = (): string => {
   const cb = connBox();
@@ -654,10 +656,10 @@ const flowEv = (): string => {
   const xw = w.x - w.w / 2 + w.w * 0.33;
   return smooth([
     at(x0, cb.y - 3),
-    at(x0, railY(x0, RAIL_BAT)),
-    at(xw, railY(xw, RAIL_BAT)),
+    at(x0, cb.y + 11),
+    at(xw, w.y + 11),
     at(xw, w.y - 3),
-  ], 10);
+  ], 8);
 };
 
 /**
@@ -711,12 +713,12 @@ const sceneMarkup = (blocks: number, units: number, ev: boolean, _evOnDock: bool
 
     <!-- the light strip on a solarbank: grey at rest, warm while it discharges -->
     <!-- the supply cable goes underground: it fades out over its last centimetres -->
-    <linearGradient id="ak-fade-g" gradientUnits="userSpaceOnUse" x1="0" y1="${at(0, connBox().y + 6)[1].toFixed(1)}" x2="0" y2="${at(0, connBox().y + GRID_STUB + 2)[1].toFixed(1)}">
+    <linearGradient id="ak-fade-g" gradientUnits="userSpaceOnUse" x1="0" y1="${at(0, baseY(CONN_X) + 2)[1].toFixed(1)}" x2="0" y2="${at(0, GRID_END + 1)[1].toFixed(1)}">
       <stop offset="0" stop-color="#fff"/><stop offset="1" stop-color="#000"/>
     </linearGradient>
     <mask id="ak-fade" maskUnits="userSpaceOnUse" x="0" y="0" width="${VW}" height="1040">
-      <rect x="0" y="0" width="${VW}" height="${at(0, connBox().y + GRID_STUB + 2)[1].toFixed(1)}" fill="#fff"/>
-      <rect x="0" y="${at(0, connBox().y + 6)[1].toFixed(1)}" width="${VW}" height="${(34 * PLACE.s).toFixed(1)}" fill="url(#ak-fade-g)"/>
+      <rect x="0" y="0" width="${VW}" height="${at(0, GRID_END + 1)[1].toFixed(1)}" fill="#fff"/>
+      <rect x="0" y="${at(0, baseY(CONN_X) + 2)[1].toFixed(1)}" width="${VW}" height="${(23 * PLACE.s).toFixed(1)}" fill="url(#ak-fade-g)"/>
     </mask>
     <filter id="ak-f-idle"><feColorMatrix type="saturate" values="0"/></filter>
     <filter id="ak-f-out"><feColorMatrix type="hueRotate" values="-80"/></filter>
@@ -744,7 +746,6 @@ const sceneMarkup = (blocks: number, units: number, ev: boolean, _evOnDock: bool
   <g class="storages">${storageMarkup(units, blocks)}</g>
 
   <g class="tap" data-tap="grid">
-    ${footShadow(cb)}
     <use href="#ak-art-connection" transform="${placeMatrix(cb, 300)}"/>
     <rect x="${cx0.toFixed(1)}" y="${cy0.toFixed(1)}" width="${(cb.w * PLACE.s).toFixed(1)}" height="${(cb.h * PLACE.s).toFixed(1)}" fill="transparent"/>
   </g>
