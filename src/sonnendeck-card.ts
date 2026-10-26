@@ -450,6 +450,11 @@ const RAIL_BAT = 16;
 
 /** where the electrical centre of the wall is */
 const WALL_MID = 570;
+/**
+ * The house connection is the hub; three cables meet its underside: the
+ * solarbanks from the left, the supply down the middle, the wallbox to the right.
+ */
+const CONN_PORT = 17;
 /** the house connection sits at the right end of the wall */
 const CONN_X = 800;
 
@@ -618,7 +623,7 @@ const flowStub = (i: number, units: number, blocks: number): string => {
 const flowHome = (units: number, blocks: number): string => {
   const first = storageBox(0, units, blocks);
   const cb = connBox();
-  const xr = cb.x - 14;
+  const xr = cb.x - CONN_PORT;
   return smooth([
     at(first.x, railY(first.x, RAIL_BAT) - 28),
     at(first.x, railY(first.x, RAIL_BAT)),
@@ -634,20 +639,21 @@ const flowHome = (units: number, blocks: number): string => {
 const GRID_STUB = 34;
 const flowGrid = (): string => {
   const cb = connBox();
-  const xr = cb.x + 14;
-  return line([at(xr, cb.y + GRID_STUB), at(xr, cb.y - 3)]);
+  return line([at(cb.x, cb.y + GRID_STUB), at(cb.x, cb.y - 3)]);
 };
 
 /**
- * The wallbox is on the house circuit: from the rail, a short run to the
- * right, parallel to the foot of the wall, then straight up into its underside.
+ * The wallbox hangs on the house connection like everything else: out of its
+ * bottom on the right, a run parallel to the foot of the wall, then straight up
+ * into the wallbox's underside.
  */
 const flowEv = (): string => {
   const cb = connBox();
   const w = wallboxBox();
-  const x0 = cb.x - 14;
+  const x0 = cb.x + CONN_PORT;
   const xw = w.x - w.w / 2 + w.w * 0.33;
   return smooth([
+    at(x0, cb.y - 3),
     at(x0, railY(x0, RAIL_BAT)),
     at(xw, railY(xw, RAIL_BAT)),
     at(xw, w.y - 3),
@@ -777,10 +783,10 @@ const sceneMarkup = (blocks: number, units: number, ev: boolean, _evOnDock: bool
     <path class="chev" id="ak-solar-chev" d="M247 99 L264 113 L247 127"/>
   </g>
 
-  <g class="tap" data-tap="home">
+  <g class="tap" data-tap="grid">
     <rect x="${RX - 250}" y="18" width="250" height="126" fill="transparent"/>
-    <text class="cap" x="${RX}" y="62" text-anchor="end" id="ak-home-cap"></text>
-    <text class="val" x="${RX}" y="126" text-anchor="end" id="ak-home-val"></text>
+    <text class="cap" x="${RX}" y="62" text-anchor="end" id="ak-grid-cap"></text>
+    <text class="val" x="${RX}" y="126" text-anchor="end" id="ak-grid-val"></text>
   </g>
 
   <g class="tap" data-tap="battery">
@@ -790,10 +796,10 @@ const sceneMarkup = (blocks: number, units: number, ev: boolean, _evOnDock: bool
     <text class="val" x="114" y="996" id="ak-store-val"></text>
   </g>
 
-  <g class="tap" data-tap="grid">
+  <g class="tap" data-tap="home">
     <rect x="${RX - 250}" y="876" width="250" height="148" fill="transparent"/>
-    <text class="cap" x="${RX}" y="920" text-anchor="end" id="ak-grid-cap"></text>
-    <text class="val" x="${RX}" y="996" text-anchor="end" id="ak-grid-val"></text>
+    <text class="cap" x="${RX}" y="920" text-anchor="end" id="ak-home-cap"></text>
+    <text class="val" x="${RX}" y="996" text-anchor="end" id="ak-home-val"></text>
   </g>
 </svg>`;
 };
