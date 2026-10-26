@@ -476,7 +476,7 @@ const blockW = (n: number): number => [0, 190, 176, 118, 78][Math.min(n, 4)];
 const BANK_ASPECT = 365 / 300;
 const bankBox = (i: number, n: number): Box => {
   const x = slotX(i, n);
-  const w = n >= 4 ? 84 : 100;
+  const w = [0, 78, 78, 72, 64][Math.min(n, 4)];
   return { x, y: baseY(x) - 10, w, h: w * BANK_ASPECT };
 };
 const DOCK_ASPECT = 418 / 420;
