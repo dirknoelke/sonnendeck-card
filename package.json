@@ -1,6 +1,6 @@
 {
   "name": "sonnendeck-card",
-  "version": "0.8.0",
+  "version": "0.9.0",
   "description": "Home Assistant Lovelace card: an isometric picture of generation, storage, house load and wallbox",
   "type": "module",
   "scripts": {

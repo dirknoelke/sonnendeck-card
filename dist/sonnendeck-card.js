@@ -41,7 +41,7 @@ const EDITOR_NAME = 'sonnendeck-card-editor';
  * stays registered as the same element — nobody has to touch their YAML.
  */
 const LEGACY_NAME = 'anker-solix-flow-card';
-const CARD_VERSION = '0.8.0';
+const CARD_VERSION = '0.9.0';
 /** noise floor in W below which a flow counts as idle */
 const EPS = 10;
 /**
