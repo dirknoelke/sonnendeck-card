@@ -48,7 +48,7 @@ oder Template-Sensoren.
 (Einstellungen → Dashboards → ⋮ → Ressourcen, erweiterter Modus muss an sein):
 
 ```yaml
-url: /local/sonnendeck-card.js?v=0.8.0
+url: /local/sonnendeck-card.js?v=0.9.0
 type: module
 ```
 
