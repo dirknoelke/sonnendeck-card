@@ -452,7 +452,7 @@ const RAIL_GRID = 34;
 /** where the electrical centre of the wall is */
 const WALL_MID = 570;
 /** the house connection sits at the right end of the wall */
-const CONN_X = 815;
+const CONN_X = 800;
 
 /** a placed picture: x is the centre, y the bottom, in picture pixels */
 interface Box {
@@ -476,7 +476,10 @@ const bankBox = (i: number, n: number): Box => {
 const DOCK_ASPECT = 418 / 420;
 const dockBox = (): Box => ({ x: WALL_MID, y: baseY(WALL_MID) - 8, w: 150, h: 150 * DOCK_ASPECT });
 const CONN_ASPECT = 370 / 300;
-const connBox = (): Box => ({ x: CONN_X, y: baseY(CONN_X) - 4, w: 64, h: 64 * CONN_ASPECT });
+const connBox = (): Box => ({ x: CONN_X, y: baseY(CONN_X) - 4, w: 58, h: 58 * CONN_ASPECT });
+/** the wallbox hangs on the wall beside the garage; its cable holster sticks out to the right */
+const WALLBOX_ASPECT = 241 / 300;
+const wallboxBox = (): Box => ({ x: 877, y: baseY(877) - 64, w: 70, h: 70 * WALLBOX_ASPECT });
 
 /** the picture's top left corner in the card, as a matrix that also applies the shear */
 const placeMatrix = (b: Box, naturalW: number): string => {
@@ -661,11 +664,13 @@ const sceneMarkup = (blocks: number, units: number, ev: boolean, _evOnDock: bool
   const [gx0, gy0] = at(930, 360);
   const cb = connBox();
   const [cx0, cy0] = at(cb.x - cb.w / 2, cb.y - cb.h);
+  const wb = wallboxBox();
+  const [wx0, wy0] = at(wb.x - wb.w / 2, wb.y - wb.h);
 
   const defs = Object.entries(ART)
     .map(([k, href]) => {
       const nat = k.startsWith('house') ? PIC : k.startsWith('panel') ? PV_PIC
-        : k === 'dock' ? { w: 420, h: 418 } : k === 'connection' ? { w: 300, h: 370 } : { w: 300, h: 365 };
+        : k === 'dock' ? { w: 420, h: 418 } : k === 'wallbox' ? { w: 300, h: 241 } : k === 'connection' ? { w: 300, h: 370 } : { w: 300, h: 365 };
       return `<image id="ak-art-${k}" width="${nat.w}" height="${nat.h}" href="${href}"/>`;
     }).join('');
 
@@ -714,6 +719,11 @@ const sceneMarkup = (blocks: number, units: number, ev: boolean, _evOnDock: bool
     <use href="#ak-art-connection" transform="${placeMatrix(cb, 300)}"/>
     <rect x="${cx0.toFixed(1)}" y="${cy0.toFixed(1)}" width="${(cb.w * PLACE.s).toFixed(1)}" height="${(cb.h * PLACE.s).toFixed(1)}" fill="transparent"/>
   </g>
+
+  ${ev ? `<g class="tap wallbox" data-tap="ev">
+    <use href="#ak-art-wallbox" transform="${placeMatrix(wb, 300)}"/>
+    <rect x="${wx0.toFixed(1)}" y="${wy0.toFixed(1)}" width="${(wb.w * PLACE.s).toFixed(1)}" height="${(wb.h * PLACE.s).toFixed(1)}" fill="transparent"/>
+  </g>` : ''}
 
   <g class="flows dc" fill="none" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round">
     ${Array.from({ length: blocks }, (_, i) => flowPath('', `pv${i}`, flowPv(i, units, blocks))).join('')}
