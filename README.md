@@ -48,7 +48,7 @@ oder Template-Sensoren.
 (Einstellungen → Dashboards → ⋮ → Ressourcen, erweiterter Modus muss an sein):
 
 ```yaml
-url: /local/sonnendeck-card.js?v=0.9.1
+url: /local/sonnendeck-card.js?v=0.10.0
 type: module
 ```
 
@@ -96,6 +96,7 @@ systems:
 | `kw_threshold`   | number   | `0`      | Ab diesem Wert in W wird auf kW umgestellt (`0` = immer W) |
 | `dark_mode`      | string   | `auto`   | `auto` (folgt dem HA-Theme), `light`, `dark` |
 | `scene`          | string   | `auto`   | Bild des Hauses: `auto` (Tag, solange `sun.sun` über dem Horizont steht; ohne die Entität nach dem Theme), `day`, `night`. Die Kartenfarben folgen weiter `dark_mode` |
+| `corners`        | map      | –        | Eigene `tap_action` je Eckwert (`solar`, `grid`, `storage`, `home`), siehe Eckwerte |
 | `labels`         | map      | –        | Überschreibt `solar`, `grid`, `home` |
 
 ### Ein System
@@ -263,6 +264,67 @@ Antippen öffnet nur dann eine Entität, wenn es genau eine gibt. Solarbetrieb u
 Speicher sind bei mehreren Systemen Summen — dort würde ein Klick willkürlich
 System 1 öffnen. Der Weg ins Einzelsystem führt über die Ladestands-Pille am
 jeweiligen Speicher.
+
+#### Details hinter den Summen
+
+Solarbetrieb, Speicher und Hauslast sind bei mehreren Systemen Summen ohne eigene
+Entität. Antippen öffnet deshalb ein Fenster über der Karte, das zeigt, woraus
+die Zahl besteht:
+
+- **Solarbetrieb**: je System die Leistung jedes Eingangs (sofern die Sensoren da sind)
+- **Speicher**: Ladestand und Batterieleistung gesamt und je System, dazu der Ausgang zum Haus
+- **Netz**: Bezug oder Einspeisung
+- **Hauslast**: die Bilanz aus Speichern, Netz und Auto
+
+Hat ein Eckwert genau eine Entität (z. B. das Netz über den Hauszähler), öffnet
+sich wie bisher deren Verlauf. Mit `action: details` lässt sich das Fenster auch dort
+erzwingen.
+
+Dieselben Werte gibt es als eigene Karte, zum Einbetten in ein Pop-up oder eine
+Ansicht. Sie nimmt dieselbe Konfiguration wie die Hauptkarte (`systems`, `house`,
+`wallbox`, ...) und zusätzlich `view`:
+
+```yaml
+type: custom:sonnendeck-details
+view: storage          # solar, grid, storage, home oder all (Standard)
+systems:
+  - device: e5bb30f4a29324f9fcc37ecda58e3b19
+  - device: 2178c5fcb8463c87487f063623085bc7
+house:
+  grid: sensor.keller_tasmota_sml_power
+```
+
+Tagesenergien zeigt die Karte noch nicht, dafür fehlen passende Sensoren in der
+Integration.
+
+#### Eigene Aktion je Eckwert
+
+Jeder Eckwert (`solar`, `grid`, `storage`, `home`) kann eine eigene Aktion bekommen,
+im gewohnten Format jeder Lovelace-Karte. Damit lässt sich zum Beispiel ein
+Pop-up öffnen, das mehr zeigt als eine einzelne Entität. Mit
+[Bubble Card](https://github.com/Clooos/Bubble-Card) ist das ein Pop-up mit
+einem Hash, den die Karte per `navigate` ansteuert. Die Karte selbst kennt Bubble
+Card nicht und braucht sie nicht, es geht mit jeder Lösung, die auf einen Hash
+oder Pfad hört.
+
+```yaml
+corners:
+  solar:
+    tap_action:
+      action: navigate
+      navigation_path: "#solar"
+  storage:
+    tap_action:
+      action: navigate
+      navigation_path: "#speicher"
+  grid:
+    tap_action:
+      action: none          # nichts tun, auch nicht die Entität öffnen
+```
+
+Erlaubt sind `more-info`, `navigate`, `url`, `perform-action`, `toggle`, `details` (das eingebaute Fenster) und `none`.
+Bei `more-info` ohne eigene `entity` nimmt die Karte die Entität hinter dem Eckwert,
+sofern es genau eine gibt. Ohne Angabe bleibt das bisherige Verhalten.
 
 ### Woraus die Flusslinien entstehen
 
