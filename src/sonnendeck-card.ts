@@ -327,6 +327,8 @@ const STRINGS: Record<string, Record<string, string>> = {
     charging: 'lädt',
     discharging: 'entlädt',
     idle: 'ruht',
+    importing: 'Bezug',
+    exporting: 'Einspeisung',
     system: 'System',
     pick_device: 'Kein System gewählt — Gerät im Editor auswählen',
     bad_unit:
@@ -340,6 +342,8 @@ const STRINGS: Record<string, Record<string, string>> = {
     charging: 'charging',
     discharging: 'discharging',
     idle: 'idle',
+    importing: 'import',
+    exporting: 'export',
     system: 'System',
     pick_device: 'No system selected — pick a device in the editor',
     bad_unit: 'These sensors report a meter reading. Instantaneous power in watts is needed:',
@@ -434,6 +438,7 @@ const smooth = (pts: Pt[], radius = 18): string => {
 /** the house image, and where it sits in the card */
 const PIC = { w: 1172, h: 668 };
 const VIEW_W = 960;
+const GRID_RX = VIEW_W - 54; // right edge of the grid readout
 const PLACE = { x: 23, y: 265, s: 0.78 };
 const at = (x: number, y: number): Pt => [PLACE.x + x * PLACE.s, PLACE.y + y * PLACE.s];
 
@@ -702,9 +707,10 @@ const sceneMarkup = (blocks: number, units: number, ev: boolean, _evOnDock: bool
   const VW = VIEW_W;
   const RX = VW - 54; // right hand text anchor
   const G2 = 660; // second guide line
-  // the storage caption carries the charge direction in words, so its column
-  // needs a little more room than the solar one above it
-  const GB = 356;
+  // the captions carry the direction in words ("Netz · Einspeisung"), so the
+  // columns need more room than the bare numbers did
+  const GB = 412; // storage value up to "100% · 10.2 kW"
+  const G3 = 570; // grid caption, longest is the German "Netz · Einspeisung"
   const [gx, gy] = at(PIC.w / 2, 640);
   const [gx0, gy0] = at(930, 360);
   const cb = connBox();
@@ -793,9 +799,9 @@ const sceneMarkup = (blocks: number, units: number, ev: boolean, _evOnDock: bool
   <g class="chips" id="ak-chips"></g>
 
   <g class="guides">
-    <path d="M300 14 V150"/><path d="M${G2} 14 V150"/>
+    <path d="M300 14 V150"/><path d="M${G3} 14 V150"/>
     <path d="M${GB} 872 V1024"/><path d="M${G2} 872 V1024"/>
-    <circle cx="300" cy="150" r="5"/><circle cx="${G2}" cy="150" r="5"/>
+    <circle cx="300" cy="150" r="5"/><circle cx="${G3}" cy="150" r="5"/>
     <circle cx="${GB}" cy="872" r="5"/><circle cx="${G2}" cy="872" r="5"/>
   </g>
 
@@ -807,8 +813,9 @@ const sceneMarkup = (blocks: number, units: number, ev: boolean, _evOnDock: bool
   </g>
 
   <g class="tap" data-tap="grid">
-    <rect x="${RX - 250}" y="18" width="250" height="126" fill="transparent"/>
+    <rect x="${G3 + 6}" y="18" width="${RX - G3 - 6}" height="126" fill="transparent"/>
     <text class="cap" x="${RX}" y="62" text-anchor="end" id="ak-grid-cap"></text>
+    <path class="arrow" id="ak-grid-arrow" d="M0 0"/>
     <text class="val" x="${RX}" y="126" text-anchor="end" id="ak-grid-val"></text>
   </g>
 
@@ -1359,6 +1366,7 @@ class SonnendeckCard extends HTMLElement {
       solarChev: q('ak-solar-chev'),
       gridCap: q('ak-grid-cap'),
       gridVal: q('ak-grid-val'),
+      gridArrow: q('ak-grid-arrow'),
       homeCap: q('ak-home-cap'),
       homeVal: q('ak-home-val'),
       storeCap: q('ak-store-cap'),
@@ -1532,8 +1540,30 @@ class SonnendeckCard extends HTMLElement {
     const solarChev = this._els.solarChev as SVGElement | null;
     if (solarChev) solarChev.setAttribute('opacity', readings.length === 1 && inputs.some((i) => i.entity) ? '1' : '0');
 
-    setText('gridCap', cfg.labels?.grid ?? t(lang, 'grid'));
+    // import or export is the one thing the bare number cannot tell: say it
+    // in words and with an arrow, like the storage corner does
+    const gridIn = (gridTotal ?? 0) > EPS;
+    const gridMoving = Math.abs(gridTotal ?? 0) > EPS;
+    const gridDir =
+      gridTotal === null ? '' : t(lang, gridMoving ? (gridIn ? 'importing' : 'exporting') : 'idle');
+    const gridName = cfg.labels?.grid ?? t(lang, 'grid');
+    setText('gridCap', gridDir ? `${gridName} · ${gridDir}` : gridName);
     setText('gridVal', fmtPower(gridTotal === null ? null : Math.abs(gridTotal), kw));
+    const gridArrow = this._els.gridArrow as SVGPathElement | null;
+    const gridValEl = this._els.gridVal as unknown as SVGTextElement | null;
+    if (gridArrow && gridValEl) {
+      // the value is right aligned, so the arrow sits left of however long it is
+      const len = gridValEl.getComputedTextLength?.() || (gridValEl.textContent ?? '').length * 25;
+      const ax = GRID_RX - len - 26;
+      gridArrow.setAttribute(
+        'd',
+        gridIn
+          ? `M${ax} 84 L${ax} 126 M${ax - 13} 113 L${ax} 126 L${ax + 13} 113`
+          : `M${ax} 126 L${ax} 84 M${ax - 13} 97 L${ax} 84 L${ax + 13} 97`,
+      );
+      gridArrow.setAttribute('opacity', gridTotal === null ? '0' : '1');
+      gridArrow.classList.toggle('idle', !gridMoving);
+    }
 
     setText('homeCap', cfg.labels?.home ?? t(lang, 'home'));
     setText('homeVal', fmtPower(homeTotal, kw));
