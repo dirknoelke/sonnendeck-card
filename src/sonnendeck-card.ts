@@ -27,8 +27,9 @@ const EDITOR_NAME = 'sonnendeck-card-editor';
  * stays registered as the same element — nobody has to touch their YAML.
  */
 const SUN = 'sun.sun';
+const DETAILS_NAME = 'sonnendeck-details';
 const LEGACY_NAME = 'anker-solix-flow-card';
-const CARD_VERSION = '0.9.1';
+const CARD_VERSION = '0.10.0';
 
 /* ------------------------------------------------------------------ *
  * Configuration
@@ -124,6 +125,23 @@ export interface SystemConfig {
   entities?: EntityMap;
 }
 
+/** a standard Home Assistant action, as `tap_action` of any other card */
+export interface ActionConfig {
+  action: 'more-info' | 'navigate' | 'url' | 'perform-action' | 'toggle' | 'details' | 'none';
+  entity?: string;
+  navigation_path?: string;
+  url_path?: string;
+  perform_action?: string;
+  target?: Record<string, unknown>;
+  data?: Record<string, unknown>;
+}
+
+export type DetailView = 'solar' | 'grid' | 'storage' | 'home';
+
+export interface CornerConfig {
+  tap_action?: ActionConfig;
+}
+
 export interface SonnendeckCardConfig {
   type: string;
   title?: string;
@@ -168,6 +186,8 @@ export interface SonnendeckCardConfig {
    */
   storage_display?: 'auto' | 'units' | 'combined';
   labels?: { solar?: string; grid?: string; home?: string };
+  /** what tapping a corner readout does; default is more-info of the entity behind it */
+  corners?: Partial<Record<'solar' | 'grid' | 'storage' | 'home', CornerConfig>>;
 }
 
 interface EntityRegistryDisplay {
@@ -329,6 +349,17 @@ const STRINGS: Record<string, Record<string, string>> = {
     idle: 'ruht',
     importing: 'Bezug',
     exporting: 'Einspeisung',
+    d_total: 'Gesamt',
+    d_input: 'Eingang',
+    d_soc: 'Ladestand',
+    d_battery: 'Batterie',
+    d_output: 'Ausgang zum Haus',
+    d_from_storage: 'Aus den Speichern',
+    d_car: 'Auto (Wallbox)',
+    d_balance: 'Bilanz',
+    d_measured: 'Gemessen',
+    d_meter_note: 'Der Zähler bestimmt das Netz.',
+    d_close: 'Schließen',
     system: 'System',
     pick_device: 'Kein System gewählt — Gerät im Editor auswählen',
     bad_unit:
@@ -344,6 +375,17 @@ const STRINGS: Record<string, Record<string, string>> = {
     idle: 'idle',
     importing: 'import',
     exporting: 'export',
+    d_total: 'Total',
+    d_input: 'Input',
+    d_soc: 'State of charge',
+    d_battery: 'Battery',
+    d_output: 'Output to the house',
+    d_from_storage: 'From the storages',
+    d_car: 'Car (wall charger)',
+    d_balance: 'Balance',
+    d_measured: 'Measured',
+    d_meter_note: 'The meter decides the grid.',
+    d_close: 'Close',
     system: 'System',
     pick_device: 'No system selected — pick a device in the editor',
     bad_unit: 'These sensors report a meter reading. Instantaneous power in watts is needed:',
@@ -838,6 +880,33 @@ const sceneMarkup = (blocks: number, units: number, ev: boolean, _evOnDock: bool
  * Styles
  * ------------------------------------------------------------------ */
 
+const DETAIL_CSS = `
+:host { --ak-sheet:#ffffff; }
+:host([dark]) { --ak-sheet:#233248; }
+ha-card { position:relative; }
+.sheet { position:absolute; inset:0; z-index:10; display:flex; align-items:center;
+         justify-content:center; padding:16px; overflow:auto; border-radius:inherit;
+         background:rgba(10,16,26,.5); backdrop-filter:blur(6px); -webkit-backdrop-filter:blur(6px); }
+.panel { position:relative; width:min(100%,460px); max-height:100%; overflow:auto;
+         box-sizing:border-box; padding:8px 20px 18px; border-radius:18px;
+         background:var(--ak-sheet); color:var(--ak-text);
+         box-shadow:0 12px 40px rgba(0,0,0,.35); }
+.panel.plain { width:100%; max-height:none; box-shadow:none; background:transparent; }
+.x { position:absolute; top:6px; right:8px; width:36px; height:36px; border:0; border-radius:50%;
+     background:transparent; color:var(--ak-muted); font-size:26px; line-height:1; cursor:pointer; }
+.x:hover { background:rgba(127,127,127,.18); }
+.d-sec h3 { margin:16px 0 6px; font-size:13px; font-weight:600; letter-spacing:.06em;
+            text-transform:uppercase; color:var(--ak-muted); }
+.d-row { display:flex; justify-content:space-between; gap:12px; padding:7px 0; font-size:15px;
+         border-bottom:1px solid rgba(127,127,127,.18); }
+.d-row b { font-variant-numeric:tabular-nums; white-space:nowrap; }
+.d-row.sum { font-size:17px; } .d-row.sum b { font-size:22px; }
+.d-row.in { padding-left:14px; color:var(--ak-muted); } .d-row.in b { color:var(--ak-text); font-weight:600; }
+.d-sub { display:flex; justify-content:space-between; margin:12px 0 2px; font-size:13px;
+         color:var(--ak-muted); }
+.d-note { margin-top:6px; font-size:12px; color:var(--ak-muted); }
+`;
+
 const STYLE = `
 :host {
   --ak-sky-1:#cbe1fe; --ak-sky-2:#d8e9fd; --ak-sky-3:#e4f0fe; --ak-sky-4:#eaf3fe;
@@ -946,6 +1015,25 @@ svg[data-night="1"][data-car="1"] .h-night-car { opacity:1; }
  * The card
  * ------------------------------------------------------------------ */
 
+/** everything the detail views show, taken from the last render */
+interface Snapshot {
+  readings: SystemReading[];
+  solar: number | null;
+  grid: number | null;
+  home: number | null;
+  homeComputed: boolean;
+  battery: number | null;
+  soc: number | null;
+  ac: number | null;
+  ev: number | null;
+  carInLoad: boolean;
+  kw: number;
+  lang?: string;
+}
+
+const esc = (v: string): string =>
+  v.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c] as string);
+
 interface SystemReading {
   label: string;
   solar: number | null;
@@ -984,6 +1072,9 @@ class SonnendeckCard extends HTMLElement {
   private _root: ShadowRoot;
   private _builtKey = '';
   private _els: Record<string, Element | null> = {};
+
+  private _snap?: Snapshot;
+  private _sheet?: DetailView;
 
   private _devices?: Record<string, DeviceEntry>;
   private _devicesPending = false;
@@ -1346,7 +1437,7 @@ class SonnendeckCard extends HTMLElement {
   private _build(panels: number, units: number, ev: boolean, evOnDock: boolean): void {
     this._root.innerHTML = '';
     const style = document.createElement('style');
-    style.textContent = STYLE;
+    style.textContent = STYLE + DETAIL_CSS;
 
     const card = document.createElement('ha-card');
     card.innerHTML = `
@@ -1430,9 +1521,142 @@ class SonnendeckCard extends HTMLElement {
     }
   }
 
+  /** the corner's own action, when the config sets one */
+  private _cornerAction(kind: string): ActionConfig | undefined {
+    const key = kind === 'battery' ? 'storage' : kind;
+    const c = this._config?.corners as Record<string, CornerConfig | undefined> | undefined;
+    return c?.[key]?.tap_action;
+  }
+
+  /** the corner readouts that have a detail view */
+  private _viewOf(kind: string): DetailView | undefined {
+    return kind === 'battery' ? 'storage' : kind === 'solar' || kind === 'grid' || kind === 'home' ? kind : undefined;
+  }
+
+  /** open the built-in detail sheet over the card */
+  public openDetails(view: DetailView): void {
+    this._sheet = view;
+    this._paintSheet();
+  }
+
+  public closeDetails(): void {
+    this._sheet = undefined;
+    this._paintSheet();
+  }
+
+  private _paintSheet(): void {
+    const card = this._root.querySelector('ha-card');
+    if (!card) return;
+    let sheet = card.querySelector<HTMLElement>('.sheet');
+    if (!this._sheet) {
+      sheet?.remove();
+      return;
+    }
+    if (!sheet) {
+      sheet = document.createElement('div');
+      sheet.className = 'sheet';
+      sheet.addEventListener('click', (e) => {
+        if (e.target === sheet) this.closeDetails();
+      });
+      card.appendChild(sheet);
+    }
+    const lang = this._snap?.lang;
+    sheet.innerHTML = `<div class="panel"><button class="x" aria-label="${esc(t(lang, 'd_close'))}">×</button>${this.detailsHtml(this._sheet)}</div>`;
+    sheet.querySelector('.x')?.addEventListener('click', () => this.closeDetails());
+  }
+
+  /** the values behind the sums, as HTML for the sheet and for the details card */
+  public detailsHtml(view: DetailView | 'all' = 'all'): string {
+    const s = this._snap;
+    if (!s) return '';
+    const L = (k: string): string => t(s.lang, k);
+    const P = (w: number | null): string => fmtPower(w, s.kw);
+    const row = (label: string, value: string, cls = ''): string =>
+      `<div class="d-row ${cls}"><span>${esc(label)}</span><b>${value}</b></div>`;
+    const sub = (label: string, value = ''): string =>
+      `<div class="d-sub"><span>${esc(label)}</span><b>${value}</b></div>`;
+    const sec = (title: string, rows: string): string =>
+      `<section class="d-sec"><h3>${esc(title)}</h3>${rows}</section>`;
+    const word = (w: number | null, pos: string, neg: string): string =>
+      w === null || Math.abs(w) <= EPS ? L('idle') : L(w > 0 ? pos : neg);
+    const abs = (w: number | null): number | null => (w === null ? null : Math.abs(w));
+    const multi = s.readings.length > 1;
+    const out: string[] = [];
+    const want = (v: DetailView): boolean => view === 'all' || view === v;
+
+    if (want('solar')) {
+      let rows = row(L('d_total'), P(s.solar), 'sum');
+      for (const r of s.readings) {
+        if (multi) rows += sub(r.label, P(r.solar));
+        // without per input sensors all four slots repeat the total — hide those
+        const distinct = new Set(r.inputs.map((i) => i.entity).filter(Boolean));
+        if (distinct.size > 1 || r.inputs.some((i) => !i.entity && distinct.size > 0)) {
+          r.inputs.forEach((i, n) => {
+            if (i.entity) rows += row(`${L('d_input')} ${n + 1}`, P(i.value), 'in');
+          });
+        }
+      }
+      out.push(sec(L('solar'), rows));
+    }
+
+    if (want('storage')) {
+      let rows = row(L('d_soc'), fmtPct(s.soc), 'sum');
+      rows += row(`${L('d_battery')} · ${word(s.battery, 'charging', 'discharging')}`, P(abs(s.battery)));
+      for (const r of s.readings) {
+        if (multi) rows += sub(r.label, fmtPct(r.soc));
+        if (multi) rows += row(`${L('d_battery')} · ${word(r.battery, 'charging', 'discharging')}`, P(abs(r.battery)), 'in');
+        const ac = this._acOf(r);
+        if (ac !== null) rows += row(L('d_output'), P(ac), 'in');
+      }
+      out.push(sec(L('storage'), rows));
+    }
+
+    if (want('grid')) {
+      let rows = row(word(s.grid, 'importing', 'exporting'), P(abs(s.grid)), 'sum');
+      rows += `<div class="d-note">${esc(L('d_meter_note'))}</div>`;
+      out.push(sec(L('grid'), rows));
+    }
+
+    if (want('home')) {
+      let rows = row(L('d_total'), P(s.home), 'sum');
+      if (s.homeComputed) {
+        rows += sub(L('d_balance'));
+        rows += row(L('d_from_storage'), P(s.ac), 'in');
+        rows += row(`${L('grid')} · ${word(s.grid, 'importing', 'exporting')}`, `${(s.grid ?? 0) < 0 ? '−' : '+'} ${P(abs(s.grid))}`, 'in');
+        if (s.carInLoad && (s.ev ?? 0) > EPS) rows += row(L('d_car'), `− ${P(s.ev)}`, 'in');
+      } else {
+        rows += `<div class="d-note">${esc(L('d_measured'))}</div>`;
+      }
+      out.push(sec(L('home'), rows));
+    }
+
+    return out.join('');
+  }
+
   private _onTap(kind: string): void {
     const id = this._tapEntity(kind);
+    const action = this._cornerAction(kind);
+    const view = this._viewOf(kind);
+    if (action) {
+      if (action.action === 'none') return;
+      if (action.action === 'details') {
+        if (view) this.openDetails(view);
+        return;
+      }
+      // the standard action event: HA runs navigate, more-info, perform-action ...
+      // so a "#popup" path opens a Bubble Card pop-up without this card knowing it
+      this.dispatchEvent(
+        new CustomEvent('hass-action', {
+          detail: { config: { entity: id, tap_action: action }, action: 'tap' },
+          bubbles: true,
+          composed: true,
+        }),
+      );
+      return;
+    }
+    // one entity behind the corner: its history. A sum has none, so show what it adds up
     if (id) this._more(id);
+    else if (view) this.openDetails(view);
   }
 
   private _onUnitTap(i: number): void {
@@ -1591,7 +1815,10 @@ class SonnendeckCard extends HTMLElement {
 
     // a pointer cursor on a readout that opens nothing is a broken promise
     this._root.querySelectorAll<SVGGElement>('g.tap').forEach((g) => {
-      g.classList.toggle('dead', !this._tapEntity(g.dataset.tap as string));
+      const kind = g.dataset.tap as string;
+      const own = this._cornerAction(kind);
+      const hasView = !!this._viewOf(kind);
+      g.classList.toggle('dead', own ? own.action === 'none' : !hasView && !this._tapEntity(kind));
     });
 
     /* per module state */
@@ -1611,7 +1838,22 @@ class SonnendeckCard extends HTMLElement {
     }
 
     /* per storage chips, plus the charger */
+    this._snap = {
+      readings,
+      solar: solarTotal,
+      grid: gridTotal,
+      home: homeTotal,
+      homeComputed: house.computed,
+      battery: batteryTotal,
+      soc: socAvg,
+      ac: acTotal,
+      ev: evPower,
+      carInLoad: cfg.wallbox?.in_home_load !== false,
+      kw,
+      lang,
+    };
     this._paintChips(readings, combined, units, evPower);
+    this._paintSheet();
 
     /* flows */
     const states: Record<string, { active: boolean; reverse: boolean }> = {
@@ -1791,6 +2033,21 @@ const GLOBAL_SCHEMA = [
     ],
   },
   {
+    name: 'corners',
+    type: 'expandable',
+    schema: [
+      ['solar', 'Solar / Solarbetrieb'],
+      ['grid', 'Grid / Netz'],
+      ['storage', 'Storage / Speicher'],
+      ['home', 'Home load / Hauslast'],
+    ].map(([name, title]) => ({
+      name,
+      title,
+      type: 'expandable',
+      schema: [{ name: 'tap_action', selector: { ui_action: {} } }],
+    })),
+  },
+  {
     name: 'house',
     type: 'expandable',
     schema: [
@@ -1955,6 +2212,8 @@ const LABELS: Record<string, Record<string, string>> = {
     animation: 'Flussanimation',
     dock: 'Power Dock (Gerät)',
     house: 'Hauszähler',
+    corners: 'Eckwerte antippen',
+    tap_action: 'Aktion beim Antippen',
     wallbox: 'Wallbox und Auto',
     power: 'Ladeleistung (W)',
     power_l1: 'Ladeleistung L1 (W)',
@@ -2004,6 +2263,8 @@ const LABELS: Record<string, Record<string, string>> = {
     animation: 'Flow animation',
     dock: 'Power Dock (device)',
     house: 'House meter',
+    corners: 'Tapping the corner values',
+    tap_action: 'Tap action',
     wallbox: 'Wall charger and car',
     power: 'Charging power (W)',
     power_l1: 'Charging power L1 (W)',
@@ -2211,10 +2472,61 @@ class SonnendeckCardEditor extends HTMLElement {
 }
 
 /* ------------------------------------------------------------------ *
+ * The details card: the numbers behind the sums, for a pop-up or a view
+ * ------------------------------------------------------------------ */
+
+interface DetailsCardConfig extends SonnendeckCardConfig {
+  /** which readout to explain; default shows all four */
+  view?: DetailView | 'all';
+}
+
+class SonnendeckDetails extends HTMLElement {
+  private _core = new SonnendeckCard();
+  private _root: ShadowRoot;
+  private _view: DetailView | 'all' = 'all';
+  private _body?: HTMLElement;
+
+  constructor() {
+    super();
+    this._root = this.attachShadow({ mode: 'open' });
+  }
+
+  static getStubConfig(hass: HassLike): DetailsCardConfig {
+    return { ...SonnendeckCard.getStubConfig(hass), type: `custom:${DETAILS_NAME}`, view: 'all' };
+  }
+
+  public setConfig(config: DetailsCardConfig): void {
+    if (!config) throw new Error('Invalid configuration');
+    this._view = config.view ?? 'all';
+    this._core.setConfig(config);
+    this._root.innerHTML = '';
+    const style = document.createElement('style');
+    style.textContent = `:host{display:block} ${STYLE}${DETAIL_CSS}`;
+    const card = document.createElement('ha-card');
+    this._body = document.createElement('div');
+    this._body.className = 'panel plain';
+    card.appendChild(this._body);
+    this._root.append(style, card);
+  }
+
+  public set hass(hass: HassLike) {
+    this._core.hass = hass;
+    if (!this._body) return;
+    this.toggleAttribute('dark', this._core.hasAttribute('dark'));
+    this._body.innerHTML = this._core.detailsHtml(this._view);
+  }
+
+  public getCardSize(): number {
+    return this._view === 'all' ? 8 : 3;
+  }
+}
+
+/* ------------------------------------------------------------------ *
  * Registration
  * ------------------------------------------------------------------ */
 
 if (!customElements.get(CARD_NAME)) customElements.define(CARD_NAME, SonnendeckCard);
+if (!customElements.get(DETAILS_NAME)) customElements.define(DETAILS_NAME, SonnendeckDetails);
 if (!customElements.get(EDITOR_NAME)) customElements.define(EDITOR_NAME, SonnendeckCardEditor);
 if (!customElements.get(LEGACY_NAME)) {
   customElements.define(LEGACY_NAME, class extends SonnendeckCard {});
@@ -2227,6 +2539,14 @@ w.customCards.push({
   name: 'Sonnendeck',
   description: 'Erzeugung, Speicher, Hauslast und Wallbox in einem isometrischen Bild',
   preview: true,
+  documentationURL: 'https://github.com/dirknoelke/sonnendeck-card',
+});
+
+w.customCards.push({
+  type: DETAILS_NAME,
+  name: 'Sonnendeck Details',
+  description: 'Die Werte hinter Solarbetrieb, Speicher, Netz und Hauslast, z. B. für ein Pop-up',
+  preview: false,
   documentationURL: 'https://github.com/dirknoelke/sonnendeck-card',
 });
 
