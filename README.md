@@ -48,7 +48,7 @@ oder Template-Sensoren.
 (Einstellungen → Dashboards → ⋮ → Ressourcen, erweiterter Modus muss an sein):
 
 ```yaml
-url: /local/sonnendeck-card.js?v=0.9.1
+url: /local/sonnendeck-card.js?v=0.10.0
 type: module
 ```
 
@@ -96,6 +96,7 @@ systems:
 | `kw_threshold`   | number   | `0`      | Ab diesem Wert in W wird auf kW umgestellt (`0` = immer W) |
 | `dark_mode`      | string   | `auto`   | `auto` (folgt dem HA-Theme), `light`, `dark` |
 | `scene`          | string   | `auto`   | Bild des Hauses: `auto` (Tag, solange `sun.sun` über dem Horizont steht; ohne die Entität nach dem Theme), `day`, `night`. Die Kartenfarben folgen weiter `dark_mode` |
+| `corners`        | map      | –        | Eigene `tap_action` je Eckwert (`solar`, `grid`, `storage`, `home`), siehe Eckwerte |
 | `labels`         | map      | –        | Überschreibt `solar`, `grid`, `home` |
 
 ### Ein System
@@ -263,6 +264,35 @@ Antippen öffnet nur dann eine Entität, wenn es genau eine gibt. Solarbetrieb u
 Speicher sind bei mehreren Systemen Summen — dort würde ein Klick willkürlich
 System 1 öffnen. Der Weg ins Einzelsystem führt über die Ladestands-Pille am
 jeweiligen Speicher.
+
+#### Eigene Aktion je Eckwert
+
+Jeder Eckwert (`solar`, `grid`, `storage`, `home`) kann eine eigene Aktion bekommen,
+im gewohnten Format jeder Lovelace-Karte. Damit lässt sich zum Beispiel ein
+Pop-up öffnen, das mehr zeigt als eine einzelne Entität. Mit
+[Bubble Card](https://github.com/Clooos/Bubble-Card) ist das ein Pop-up mit
+einem Hash, den die Karte per `navigate` ansteuert. Die Karte selbst kennt Bubble
+Card nicht und braucht sie nicht, es geht mit jeder Lösung, die auf einen Hash
+oder Pfad hört.
+
+```yaml
+corners:
+  solar:
+    tap_action:
+      action: navigate
+      navigation_path: "#solar"
+  storage:
+    tap_action:
+      action: navigate
+      navigation_path: "#speicher"
+  grid:
+    tap_action:
+      action: none          # nichts tun, auch nicht die Entität öffnen
+```
+
+Erlaubt sind `more-info`, `navigate`, `url`, `perform-action`, `toggle` und `none`.
+Bei `more-info` ohne eigene `entity` nimmt die Karte die Entität hinter dem Eckwert,
+sofern es genau eine gibt. Ohne Angabe bleibt das bisherige Verhalten.
 
 ### Woraus die Flusslinien entstehen
 

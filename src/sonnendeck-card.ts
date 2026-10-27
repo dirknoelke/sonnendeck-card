@@ -28,7 +28,7 @@ const EDITOR_NAME = 'sonnendeck-card-editor';
  */
 const SUN = 'sun.sun';
 const LEGACY_NAME = 'anker-solix-flow-card';
-const CARD_VERSION = '0.9.1';
+const CARD_VERSION = '0.10.0';
 
 /* ------------------------------------------------------------------ *
  * Configuration
@@ -124,6 +124,21 @@ export interface SystemConfig {
   entities?: EntityMap;
 }
 
+/** a standard Home Assistant action, as `tap_action` of any other card */
+export interface ActionConfig {
+  action: 'more-info' | 'navigate' | 'url' | 'perform-action' | 'toggle' | 'none';
+  entity?: string;
+  navigation_path?: string;
+  url_path?: string;
+  perform_action?: string;
+  target?: Record<string, unknown>;
+  data?: Record<string, unknown>;
+}
+
+export interface CornerConfig {
+  tap_action?: ActionConfig;
+}
+
 export interface SonnendeckCardConfig {
   type: string;
   title?: string;
@@ -168,6 +183,8 @@ export interface SonnendeckCardConfig {
    */
   storage_display?: 'auto' | 'units' | 'combined';
   labels?: { solar?: string; grid?: string; home?: string };
+  /** what tapping a corner readout does; default is more-info of the entity behind it */
+  corners?: Partial<Record<'solar' | 'grid' | 'storage' | 'home', CornerConfig>>;
 }
 
 interface EntityRegistryDisplay {
@@ -1430,8 +1447,29 @@ class SonnendeckCard extends HTMLElement {
     }
   }
 
+  /** the corner's own action, when the config sets one */
+  private _cornerAction(kind: string): ActionConfig | undefined {
+    const key = kind === 'battery' ? 'storage' : kind;
+    const c = this._config?.corners as Record<string, CornerConfig | undefined> | undefined;
+    return c?.[key]?.tap_action;
+  }
+
   private _onTap(kind: string): void {
     const id = this._tapEntity(kind);
+    const action = this._cornerAction(kind);
+    if (action) {
+      if (action.action === 'none') return;
+      // the standard action event: HA runs navigate, more-info, perform-action ...
+      // so a "#popup" path opens a Bubble Card pop-up without this card knowing it
+      this.dispatchEvent(
+        new CustomEvent('hass-action', {
+          detail: { config: { entity: id, tap_action: action }, action: 'tap' },
+          bubbles: true,
+          composed: true,
+        }),
+      );
+      return;
+    }
     if (id) this._more(id);
   }
 
@@ -1591,7 +1629,9 @@ class SonnendeckCard extends HTMLElement {
 
     // a pointer cursor on a readout that opens nothing is a broken promise
     this._root.querySelectorAll<SVGGElement>('g.tap').forEach((g) => {
-      g.classList.toggle('dead', !this._tapEntity(g.dataset.tap as string));
+      const kind = g.dataset.tap as string;
+      const own = this._cornerAction(kind);
+      g.classList.toggle('dead', own ? own.action === 'none' : !this._tapEntity(kind));
     });
 
     /* per module state */
@@ -1791,6 +1831,21 @@ const GLOBAL_SCHEMA = [
     ],
   },
   {
+    name: 'corners',
+    type: 'expandable',
+    schema: [
+      ['solar', 'Solar / Solarbetrieb'],
+      ['grid', 'Grid / Netz'],
+      ['storage', 'Storage / Speicher'],
+      ['home', 'Home load / Hauslast'],
+    ].map(([name, title]) => ({
+      name,
+      title,
+      type: 'expandable',
+      schema: [{ name: 'tap_action', selector: { ui_action: {} } }],
+    })),
+  },
+  {
     name: 'house',
     type: 'expandable',
     schema: [
@@ -1955,6 +2010,8 @@ const LABELS: Record<string, Record<string, string>> = {
     animation: 'Flussanimation',
     dock: 'Power Dock (Gerät)',
     house: 'Hauszähler',
+    corners: 'Eckwerte antippen',
+    tap_action: 'Aktion beim Antippen',
     wallbox: 'Wallbox und Auto',
     power: 'Ladeleistung (W)',
     power_l1: 'Ladeleistung L1 (W)',
@@ -2004,6 +2061,8 @@ const LABELS: Record<string, Record<string, string>> = {
     animation: 'Flow animation',
     dock: 'Power Dock (device)',
     house: 'House meter',
+    corners: 'Tapping the corner values',
+    tap_action: 'Tap action',
     wallbox: 'Wall charger and car',
     power: 'Charging power (W)',
     power_l1: 'Charging power L1 (W)',
