@@ -41,6 +41,7 @@ const EDITOR_NAME = 'sonnendeck-card-editor';
  * stays registered as the same element — nobody has to touch their YAML.
  */
 const SUN = 'sun.sun';
+const DETAILS_NAME = 'sonnendeck-details';
 const LEGACY_NAME = 'anker-solix-flow-card';
 const CARD_VERSION = '0.10.0';
 /** noise floor in W below which a flow counts as idle */
@@ -172,6 +173,17 @@ const STRINGS = {
         idle: 'ruht',
         importing: 'Bezug',
         exporting: 'Einspeisung',
+        d_total: 'Gesamt',
+        d_input: 'Eingang',
+        d_soc: 'Ladestand',
+        d_battery: 'Batterie',
+        d_output: 'Ausgang zum Haus',
+        d_from_storage: 'Aus den Speichern',
+        d_car: 'Auto (Wallbox)',
+        d_balance: 'Bilanz',
+        d_measured: 'Gemessen',
+        d_meter_note: 'Der Zähler bestimmt das Netz.',
+        d_close: 'Schließen',
         system: 'System',
         pick_device: 'Kein System gewählt — Gerät im Editor auswählen',
         bad_unit: 'Diese Sensoren liefern einen Zählerstand. Gebraucht wird die Momentanleistung in Watt:',
@@ -186,6 +198,17 @@ const STRINGS = {
         idle: 'idle',
         importing: 'import',
         exporting: 'export',
+        d_total: 'Total',
+        d_input: 'Input',
+        d_soc: 'State of charge',
+        d_battery: 'Battery',
+        d_output: 'Output to the house',
+        d_from_storage: 'From the storages',
+        d_car: 'Car (wall charger)',
+        d_balance: 'Balance',
+        d_measured: 'Measured',
+        d_meter_note: 'The meter decides the grid.',
+        d_close: 'Close',
         system: 'System',
         pick_device: 'No system selected — pick a device in the editor',
         bad_unit: 'These sensors report a meter reading. Instantaneous power in watts is needed:',
@@ -621,6 +644,32 @@ const sceneMarkup = (blocks, units, ev, _evOnDock) => {
 /* ------------------------------------------------------------------ *
  * Styles
  * ------------------------------------------------------------------ */
+const DETAIL_CSS = `
+:host { --ak-sheet:#ffffff; }
+:host([dark]) { --ak-sheet:#233248; }
+ha-card { position:relative; }
+.sheet { position:absolute; inset:0; z-index:10; display:flex; align-items:center;
+         justify-content:center; padding:16px; overflow:auto; border-radius:inherit;
+         background:rgba(10,16,26,.5); backdrop-filter:blur(6px); -webkit-backdrop-filter:blur(6px); }
+.panel { position:relative; width:min(100%,460px); max-height:100%; overflow:auto;
+         box-sizing:border-box; padding:8px 20px 18px; border-radius:18px;
+         background:var(--ak-sheet); color:var(--ak-text);
+         box-shadow:0 12px 40px rgba(0,0,0,.35); }
+.panel.plain { width:100%; max-height:none; box-shadow:none; background:transparent; }
+.x { position:absolute; top:6px; right:8px; width:36px; height:36px; border:0; border-radius:50%;
+     background:transparent; color:var(--ak-muted); font-size:26px; line-height:1; cursor:pointer; }
+.x:hover { background:rgba(127,127,127,.18); }
+.d-sec h3 { margin:16px 0 6px; font-size:13px; font-weight:600; letter-spacing:.06em;
+            text-transform:uppercase; color:var(--ak-muted); }
+.d-row { display:flex; justify-content:space-between; gap:12px; padding:7px 0; font-size:15px;
+         border-bottom:1px solid rgba(127,127,127,.18); }
+.d-row b { font-variant-numeric:tabular-nums; white-space:nowrap; }
+.d-row.sum { font-size:17px; } .d-row.sum b { font-size:22px; }
+.d-row.in { padding-left:14px; color:var(--ak-muted); } .d-row.in b { color:var(--ak-text); font-weight:600; }
+.d-sub { display:flex; justify-content:space-between; margin:12px 0 2px; font-size:13px;
+         color:var(--ak-muted); }
+.d-note { margin-top:6px; font-size:12px; color:var(--ak-muted); }
+`;
 const STYLE = `
 :host {
   --ak-sky-1:#cbe1fe; --ak-sky-2:#d8e9fd; --ak-sky-3:#e4f0fe; --ak-sky-4:#eaf3fe;
@@ -724,6 +773,7 @@ svg[data-night="1"][data-car="1"] .h-night-car { opacity:1; }
   .flow-dash { animation:none !important; opacity:0 !important; }
 }
 `;
+const esc = (v) => v.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
 const sumOf = (values) => {
     const present = values.filter((v) => v !== null);
     return present.length ? present.reduce((a, b) => a + b, 0) : null;
@@ -1077,7 +1127,7 @@ class SonnendeckCard extends HTMLElement {
     _build(panels, units, ev, evOnDock) {
         this._root.innerHTML = '';
         const style = document.createElement('style');
-        style.textContent = STYLE;
+        style.textContent = STYLE + DETAIL_CSS;
         const card = document.createElement('ha-card');
         card.innerHTML = `
       <h2 class="title" id="ak-title" hidden></h2>
@@ -1159,12 +1209,119 @@ class SonnendeckCard extends HTMLElement {
         const c = this._config?.corners;
         return c?.[key]?.tap_action;
     }
+    /** the corner readouts that have a detail view */
+    _viewOf(kind) {
+        return kind === 'battery' ? 'storage' : kind === 'solar' || kind === 'grid' || kind === 'home' ? kind : undefined;
+    }
+    /** open the built-in detail sheet over the card */
+    openDetails(view) {
+        this._sheet = view;
+        this._paintSheet();
+    }
+    closeDetails() {
+        this._sheet = undefined;
+        this._paintSheet();
+    }
+    _paintSheet() {
+        const card = this._root.querySelector('ha-card');
+        if (!card)
+            return;
+        let sheet = card.querySelector('.sheet');
+        if (!this._sheet) {
+            sheet?.remove();
+            return;
+        }
+        if (!sheet) {
+            sheet = document.createElement('div');
+            sheet.className = 'sheet';
+            sheet.addEventListener('click', (e) => {
+                if (e.target === sheet)
+                    this.closeDetails();
+            });
+            card.appendChild(sheet);
+        }
+        const lang = this._snap?.lang;
+        sheet.innerHTML = `<div class="panel"><button class="x" aria-label="${esc(t(lang, 'd_close'))}">×</button>${this.detailsHtml(this._sheet)}</div>`;
+        sheet.querySelector('.x')?.addEventListener('click', () => this.closeDetails());
+    }
+    /** the values behind the sums, as HTML for the sheet and for the details card */
+    detailsHtml(view = 'all') {
+        const s = this._snap;
+        if (!s)
+            return '';
+        const L = (k) => t(s.lang, k);
+        const P = (w) => fmtPower(w, s.kw);
+        const row = (label, value, cls = '') => `<div class="d-row ${cls}"><span>${esc(label)}</span><b>${value}</b></div>`;
+        const sub = (label, value = '') => `<div class="d-sub"><span>${esc(label)}</span><b>${value}</b></div>`;
+        const sec = (title, rows) => `<section class="d-sec"><h3>${esc(title)}</h3>${rows}</section>`;
+        const word = (w, pos, neg) => w === null || Math.abs(w) <= EPS ? L('idle') : L(w > 0 ? pos : neg);
+        const abs = (w) => (w === null ? null : Math.abs(w));
+        const multi = s.readings.length > 1;
+        const out = [];
+        const want = (v) => view === 'all' || view === v;
+        if (want('solar')) {
+            let rows = row(L('d_total'), P(s.solar), 'sum');
+            for (const r of s.readings) {
+                if (multi)
+                    rows += sub(r.label, P(r.solar));
+                // without per input sensors all four slots repeat the total — hide those
+                const distinct = new Set(r.inputs.map((i) => i.entity).filter(Boolean));
+                if (distinct.size > 1 || r.inputs.some((i) => !i.entity && distinct.size > 0)) {
+                    r.inputs.forEach((i, n) => {
+                        if (i.entity)
+                            rows += row(`${L('d_input')} ${n + 1}`, P(i.value), 'in');
+                    });
+                }
+            }
+            out.push(sec(L('solar'), rows));
+        }
+        if (want('storage')) {
+            let rows = row(L('d_soc'), fmtPct(s.soc), 'sum');
+            rows += row(`${L('d_battery')} · ${word(s.battery, 'charging', 'discharging')}`, P(abs(s.battery)));
+            for (const r of s.readings) {
+                if (multi)
+                    rows += sub(r.label, fmtPct(r.soc));
+                if (multi)
+                    rows += row(`${L('d_battery')} · ${word(r.battery, 'charging', 'discharging')}`, P(abs(r.battery)), 'in');
+                const ac = this._acOf(r);
+                if (ac !== null)
+                    rows += row(L('d_output'), P(ac), 'in');
+            }
+            out.push(sec(L('storage'), rows));
+        }
+        if (want('grid')) {
+            let rows = row(word(s.grid, 'importing', 'exporting'), P(abs(s.grid)), 'sum');
+            rows += `<div class="d-note">${esc(L('d_meter_note'))}</div>`;
+            out.push(sec(L('grid'), rows));
+        }
+        if (want('home')) {
+            let rows = row(L('d_total'), P(s.home), 'sum');
+            if (s.homeComputed) {
+                rows += sub(L('d_balance'));
+                rows += row(L('d_from_storage'), P(s.ac), 'in');
+                rows += row(`${L('grid')} · ${word(s.grid, 'importing', 'exporting')}`, `${(s.grid ?? 0) < 0 ? '−' : '+'} ${P(abs(s.grid))}`, 'in');
+                if (s.carInLoad && (s.ev ?? 0) > EPS)
+                    rows += row(L('d_car'), `− ${P(s.ev)}`, 'in');
+            }
+            else {
+                rows += `<div class="d-note">${esc(L('d_measured'))}</div>`;
+            }
+            out.push(sec(L('home'), rows));
+        }
+        return out.join('');
+    }
     _onTap(kind) {
         const id = this._tapEntity(kind);
         const action = this._cornerAction(kind);
+        const view = this._viewOf(kind);
         if (action) {
             if (action.action === 'none')
                 return;
+            if (action.action === 'details') {
+                if (view)
+                    this.openDetails(view);
+                return;
+            }
             // the standard action event: HA runs navigate, more-info, perform-action ...
             // so a "#popup" path opens a Bubble Card pop-up without this card knowing it
             this.dispatchEvent(new CustomEvent('hass-action', {
@@ -1174,8 +1331,11 @@ class SonnendeckCard extends HTMLElement {
             }));
             return;
         }
+        // one entity behind the corner: its history. A sum has none, so show what it adds up
         if (id)
             this._more(id);
+        else if (view)
+            this.openDetails(view);
     }
     _onUnitTap(i) {
         const sys = this._systems[i];
@@ -1309,7 +1469,8 @@ class SonnendeckCard extends HTMLElement {
         this._root.querySelectorAll('g.tap').forEach((g) => {
             const kind = g.dataset.tap;
             const own = this._cornerAction(kind);
-            g.classList.toggle('dead', own ? own.action === 'none' : !this._tapEntity(kind));
+            const hasView = !!this._viewOf(kind);
+            g.classList.toggle('dead', own ? own.action === 'none' : !hasView && !this._tapEntity(kind));
         });
         /* per module state */
         const peak = Math.max(cfg.panel_peak ?? 400, 1);
@@ -1326,7 +1487,22 @@ class SonnendeckCard extends HTMLElement {
             svg.dataset.car = ev && (evPower ?? 0) > EPS ? '1' : '0';
         }
         /* per storage chips, plus the charger */
+        this._snap = {
+            readings,
+            solar: solarTotal,
+            grid: gridTotal,
+            home: homeTotal,
+            homeComputed: house.computed,
+            battery: batteryTotal,
+            soc: socAvg,
+            ac: acTotal,
+            ev: evPower,
+            carInLoad: cfg.wallbox?.in_home_load !== false,
+            kw,
+            lang,
+        };
         this._paintChips(readings, combined, units, evPower);
+        this._paintSheet();
         /* flows */
         const states = {
             batteryToHome: { active: Math.abs(acTotal ?? 0) > EPS, reverse: (acTotal ?? 0) < 0 },
@@ -1904,11 +2080,48 @@ class SonnendeckCardEditor extends HTMLElement {
         }
     }
 }
+class SonnendeckDetails extends HTMLElement {
+    constructor() {
+        super();
+        this._core = new SonnendeckCard();
+        this._view = 'all';
+        this._root = this.attachShadow({ mode: 'open' });
+    }
+    static getStubConfig(hass) {
+        return { ...SonnendeckCard.getStubConfig(hass), type: `custom:${DETAILS_NAME}`, view: 'all' };
+    }
+    setConfig(config) {
+        if (!config)
+            throw new Error('Invalid configuration');
+        this._view = config.view ?? 'all';
+        this._core.setConfig(config);
+        this._root.innerHTML = '';
+        const style = document.createElement('style');
+        style.textContent = `:host{display:block} ${STYLE}${DETAIL_CSS}`;
+        const card = document.createElement('ha-card');
+        this._body = document.createElement('div');
+        this._body.className = 'panel plain';
+        card.appendChild(this._body);
+        this._root.append(style, card);
+    }
+    set hass(hass) {
+        this._core.hass = hass;
+        if (!this._body)
+            return;
+        this.toggleAttribute('dark', this._core.hasAttribute('dark'));
+        this._body.innerHTML = this._core.detailsHtml(this._view);
+    }
+    getCardSize() {
+        return this._view === 'all' ? 8 : 3;
+    }
+}
 /* ------------------------------------------------------------------ *
  * Registration
  * ------------------------------------------------------------------ */
 if (!customElements.get(CARD_NAME))
     customElements.define(CARD_NAME, SonnendeckCard);
+if (!customElements.get(DETAILS_NAME))
+    customElements.define(DETAILS_NAME, SonnendeckDetails);
 if (!customElements.get(EDITOR_NAME))
     customElements.define(EDITOR_NAME, SonnendeckCardEditor);
 if (!customElements.get(LEGACY_NAME)) {
@@ -1922,6 +2135,13 @@ w.customCards.push({
     name: 'Sonnendeck',
     description: 'Erzeugung, Speicher, Hauslast und Wallbox in einem isometrischen Bild',
     preview: true,
+    documentationURL: 'https://github.com/dirknoelke/sonnendeck-card',
+});
+w.customCards.push({
+    type: DETAILS_NAME,
+    name: 'Sonnendeck Details',
+    description: 'Die Werte hinter Solarbetrieb, Speicher, Netz und Hauslast, z. B. für ein Pop-up',
+    preview: false,
     documentationURL: 'https://github.com/dirknoelke/sonnendeck-card',
 });
 // eslint-disable-next-line no-console

@@ -265,6 +265,38 @@ Speicher sind bei mehreren Systemen Summen — dort würde ein Klick willkürlic
 System 1 öffnen. Der Weg ins Einzelsystem führt über die Ladestands-Pille am
 jeweiligen Speicher.
 
+#### Details hinter den Summen
+
+Solarbetrieb, Speicher und Hauslast sind bei mehreren Systemen Summen ohne eigene
+Entität. Antippen öffnet deshalb ein Fenster über der Karte, das zeigt, woraus
+die Zahl besteht:
+
+- **Solarbetrieb**: je System die Leistung jedes Eingangs (sofern die Sensoren da sind)
+- **Speicher**: Ladestand und Batterieleistung gesamt und je System, dazu der Ausgang zum Haus
+- **Netz**: Bezug oder Einspeisung
+- **Hauslast**: die Bilanz aus Speichern, Netz und Auto
+
+Hat ein Eckwert genau eine Entität (z. B. das Netz über den Hauszähler), öffnet
+sich wie bisher deren Verlauf. Mit `action: details` lässt sich das Fenster auch dort
+erzwingen.
+
+Dieselben Werte gibt es als eigene Karte, zum Einbetten in ein Pop-up oder eine
+Ansicht. Sie nimmt dieselbe Konfiguration wie die Hauptkarte (`systems`, `house`,
+`wallbox`, ...) und zusätzlich `view`:
+
+```yaml
+type: custom:sonnendeck-details
+view: storage          # solar, grid, storage, home oder all (Standard)
+systems:
+  - device: e5bb30f4a29324f9fcc37ecda58e3b19
+  - device: 2178c5fcb8463c87487f063623085bc7
+house:
+  grid: sensor.keller_tasmota_sml_power
+```
+
+Tagesenergien zeigt die Karte noch nicht, dafür fehlen passende Sensoren in der
+Integration.
+
 #### Eigene Aktion je Eckwert
 
 Jeder Eckwert (`solar`, `grid`, `storage`, `home`) kann eine eigene Aktion bekommen,
@@ -290,7 +322,7 @@ corners:
       action: none          # nichts tun, auch nicht die Entität öffnen
 ```
 
-Erlaubt sind `more-info`, `navigate`, `url`, `perform-action`, `toggle` und `none`.
+Erlaubt sind `more-info`, `navigate`, `url`, `perform-action`, `toggle`, `details` (das eingebaute Fenster) und `none`.
 Bei `more-info` ohne eigene `entity` nimmt die Karte die Entität hinter dem Eckwert,
 sofern es genau eine gibt. Ohne Angabe bleibt das bisherige Verhalten.
 
