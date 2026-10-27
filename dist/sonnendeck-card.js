@@ -42,7 +42,7 @@ const EDITOR_NAME = 'sonnendeck-card-editor';
  */
 const SUN = 'sun.sun';
 const LEGACY_NAME = 'anker-solix-flow-card';
-const CARD_VERSION = '0.9.1';
+const CARD_VERSION = '0.10.0';
 /** noise floor in W below which a flow counts as idle */
 const EPS = 10;
 /**
@@ -1153,8 +1153,27 @@ class SonnendeckCard extends HTMLElement {
                 return undefined;
         }
     }
+    /** the corner's own action, when the config sets one */
+    _cornerAction(kind) {
+        const key = kind === 'battery' ? 'storage' : kind;
+        const c = this._config?.corners;
+        return c?.[key]?.tap_action;
+    }
     _onTap(kind) {
         const id = this._tapEntity(kind);
+        const action = this._cornerAction(kind);
+        if (action) {
+            if (action.action === 'none')
+                return;
+            // the standard action event: HA runs navigate, more-info, perform-action ...
+            // so a "#popup" path opens a Bubble Card pop-up without this card knowing it
+            this.dispatchEvent(new CustomEvent('hass-action', {
+                detail: { config: { entity: id, tap_action: action }, action: 'tap' },
+                bubbles: true,
+                composed: true,
+            }));
+            return;
+        }
         if (id)
             this._more(id);
     }
@@ -1288,7 +1307,9 @@ class SonnendeckCard extends HTMLElement {
         }
         // a pointer cursor on a readout that opens nothing is a broken promise
         this._root.querySelectorAll('g.tap').forEach((g) => {
-            g.classList.toggle('dead', !this._tapEntity(g.dataset.tap));
+            const kind = g.dataset.tap;
+            const own = this._cornerAction(kind);
+            g.classList.toggle('dead', own ? own.action === 'none' : !this._tapEntity(kind));
         });
         /* per module state */
         const peak = Math.max(cfg.panel_peak ?? 400, 1);
@@ -1476,6 +1497,21 @@ const GLOBAL_SCHEMA = [
         ],
     },
     {
+        name: 'corners',
+        type: 'expandable',
+        schema: [
+            ['solar', 'Solar / Solarbetrieb'],
+            ['grid', 'Grid / Netz'],
+            ['storage', 'Storage / Speicher'],
+            ['home', 'Home load / Hauslast'],
+        ].map(([name, title]) => ({
+            name,
+            title,
+            type: 'expandable',
+            schema: [{ name: 'tap_action', selector: { ui_action: {} } }],
+        })),
+    },
+    {
         name: 'house',
         type: 'expandable',
         schema: [
@@ -1633,6 +1669,8 @@ const LABELS = {
         animation: 'Flussanimation',
         dock: 'Power Dock (Gerät)',
         house: 'Hauszähler',
+        corners: 'Eckwerte antippen',
+        tap_action: 'Aktion beim Antippen',
         wallbox: 'Wallbox und Auto',
         power: 'Ladeleistung (W)',
         power_l1: 'Ladeleistung L1 (W)',
@@ -1681,6 +1719,8 @@ const LABELS = {
         animation: 'Flow animation',
         dock: 'Power Dock (device)',
         house: 'House meter',
+        corners: 'Tapping the corner values',
+        tap_action: 'Tap action',
         wallbox: 'Wall charger and car',
         power: 'Charging power (W)',
         power_l1: 'Charging power L1 (W)',

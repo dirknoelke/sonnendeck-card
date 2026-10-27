@@ -56,6 +56,7 @@ card.setConfig({
   ...(p.has('dock') ? { storage_display: 'combined' } : {}),
   house: { grid_import: 'sensor.sml_in', grid_export: 'sensor.sml_out' },
   ...(p.has('noev') ? {} : { wallbox: { power: 'sensor.wallbox' } }),
+  ...(p.has('tap') ? { corners: { solar: { tap_action: { action: 'navigate', navigation_path: '#solar' } }, grid: { tap_action: { action: 'none' } } } } : {}),
 });
 card.hass = {
   states,
