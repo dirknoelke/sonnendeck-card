@@ -203,6 +203,14 @@ wallbox:
   status: sensor.wallbox_status
 ```
 
+Ein einzelner Leistungssensor geht auch, zum Beispiel von einem Shelly im
+Stromkreis der Ladebox:
+
+```yaml
+wallbox:
+  power: sensor.shelly_wallbox_power    # W, nicht der kWh-Zähler
+```
+
 Die Ladeleistung erscheint als Pille über dem Auto, ab 1 kW in Kilowatt — eine
 Wallbox in Watt zu lesen hilft niemandem.
 
