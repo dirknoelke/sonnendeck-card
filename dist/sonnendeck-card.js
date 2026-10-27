@@ -1644,7 +1644,7 @@ const SYSTEM_SCHEMA = [
         ],
     },
 ];
-const GLOBAL_SCHEMA = [
+const globalSchema = (de) => [
     { name: 'title', selector: { text: {} } },
     { name: 'dock', selector: { device: { integration: 'anker_solix' } } },
     {
@@ -1676,10 +1676,10 @@ const GLOBAL_SCHEMA = [
         name: 'corners',
         type: 'expandable',
         schema: [
-            ['solar', 'Solar / Solarbetrieb'],
-            ['grid', 'Grid / Netz'],
-            ['storage', 'Storage / Speicher'],
-            ['home', 'Home load / Hauslast'],
+            ['solar', de ? 'Solarbetrieb' : 'Solar'],
+            ['grid', de ? 'Netz' : 'Grid'],
+            ['storage', de ? 'Speicher' : 'Storage'],
+            ['home', de ? 'Hauslast' : 'Home load'],
         ].map(([name, title]) => ({
             name,
             title,
@@ -1756,9 +1756,9 @@ const GLOBAL_SCHEMA = [
             select: {
                 mode: 'dropdown',
                 options: [
-                    { value: 'auto', label: 'Auto (Sonne)' },
-                    { value: 'day', label: 'Tag' },
-                    { value: 'night', label: 'Nacht' },
+                    { value: 'auto', label: de ? 'Auto (nach der Sonne)' : 'Auto (follows the sun)' },
+                    { value: 'day', label: de ? 'Tag' : 'Day' },
+                    { value: 'night', label: de ? 'Nacht' : 'Night' },
                 ],
             },
         },
@@ -2073,7 +2073,7 @@ class SonnendeckCardEditor extends HTMLElement {
         });
         if (this._globalForm) {
             this._globalForm.hass = this._hass;
-            this._globalForm.schema = GLOBAL_SCHEMA;
+            this._globalForm.schema = globalSchema(this._german);
             this._globalForm.data = this._config;
             this._globalForm.computeLabel = (s) => labels[s.name] ?? s.name;
             this._globalForm.computeHelper = (s) => helpers[s.name] ?? '';
@@ -2133,14 +2133,14 @@ w.customCards = w.customCards || [];
 w.customCards.push({
     type: CARD_NAME,
     name: 'Sonnendeck',
-    description: 'Erzeugung, Speicher, Hauslast und Wallbox in einem isometrischen Bild',
+    description: 'Generation, storage, house load and wall charger of a household in one picture',
     preview: true,
     documentationURL: 'https://github.com/dirknoelke/sonnendeck-card',
 });
 w.customCards.push({
     type: DETAILS_NAME,
     name: 'Sonnendeck Details',
-    description: 'Die Werte hinter Solarbetrieb, Speicher, Netz und Hauslast, z. B. für ein Pop-up',
+    description: 'The values behind solar, storage, grid and house load, e.g. for a pop-up',
     preview: false,
     documentationURL: 'https://github.com/dirknoelke/sonnendeck-card',
 });
