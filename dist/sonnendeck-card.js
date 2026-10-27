@@ -40,8 +40,9 @@ const EDITOR_NAME = 'sonnendeck-card-editor';
  * out there still say `type: custom:anker-solix-flow-card`, so the old tag
  * stays registered as the same element — nobody has to touch their YAML.
  */
+const SUN = 'sun.sun';
 const LEGACY_NAME = 'anker-solix-flow-card';
-const CARD_VERSION = '0.9.0';
+const CARD_VERSION = '0.9.1';
 /** noise floor in W below which a flow counts as idle */
 const EPS = 10;
 /**
@@ -829,6 +830,8 @@ class SonnendeckCard extends HTMLElement {
                     return true;
             }
         }
+        if (a.states[SUN] !== b.states[SUN])
+            return true;
         return a.themes?.darkMode !== b.themes?.darkMode;
     }
     /* --------------------------- discovery --------------------------- */
@@ -1188,6 +1191,11 @@ class SonnendeckCard extends HTMLElement {
                     window.matchMedia?.('(prefers-color-scheme: dark)').matches ??
                     false));
         this.toggleAttribute('dark', dark);
+        // the house picture follows the sun, not the colour scheme
+        const sceneMode = cfg.scene ?? 'auto';
+        const sunState = this._hass.states[SUN]?.state;
+        const night = sceneMode === 'night' ||
+            (sceneMode === 'auto' && (sunState ? sunState === 'below_horizon' : dark));
         const setText = (k, v) => {
             const el = this._els[k];
             if (el)
@@ -1267,7 +1275,7 @@ class SonnendeckCard extends HTMLElement {
         /* the picture: night with a dark theme, the car in the garage while it charges */
         const svg = this._root.querySelector('svg');
         if (svg) {
-            svg.dataset.night = dark ? '1' : '0';
+            svg.dataset.night = night ? '1' : '0';
             svg.dataset.car = ev && (evPower ?? 0) > EPS ? '1' : '0';
         }
         /* per storage chips, plus the charger */
@@ -1505,6 +1513,19 @@ const GLOBAL_SCHEMA = [
         ],
     },
     {
+        name: 'scene',
+        selector: {
+            select: {
+                mode: 'dropdown',
+                options: [
+                    { value: 'auto', label: 'Auto (Sonne)' },
+                    { value: 'day', label: 'Tag' },
+                    { value: 'night', label: 'Nacht' },
+                ],
+            },
+        },
+    },
+    {
         name: 'dark_mode',
         selector: {
             select: {
@@ -1599,6 +1620,7 @@ const LABELS = {
         load: 'Hausverbrauch (W) — optional',
         kw_threshold: 'kW ab … W (0 = immer W)',
         dark_mode: 'Farbschema',
+        scene: 'Haus: Tag oder Nacht',
         add: '+ System hinzufügen',
         remove: 'System entfernen',
         system: 'System',
@@ -1646,6 +1668,7 @@ const LABELS = {
         load: 'House consumption (W) — optional',
         kw_threshold: 'kW above … W (0 = always W)',
         dark_mode: 'Colour scheme',
+        scene: 'House: day or night',
         add: '+ Add system',
         remove: 'Remove system',
         system: 'System',
