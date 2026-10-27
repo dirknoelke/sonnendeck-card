@@ -1,198 +1,198 @@
 # Sonnendeck
 
-Eine Lovelace-Karte für Home Assistant, die den Energiefluss eines Haushalts als ein
-Bild zeigt: ein Haus mit PV-Modulen auf dem Dach, Solarbanks an der Wand,
-Hausanschluss und Garage mit Wallbox — mit animierten Flusslinien. Haus und Geräte sind
-Bilder (Tag und Nacht, Auto in der Garage oder unterwegs), alles, was einen Zustand
-trägt, liegt als Vektor darüber.
+[Deutsch](README.de.md) | **English**
 
-Gebaut für Balkonkraftwerke mit Speicher, insbesondere für **Anker SOLIX** über die
-[anker_solix](https://github.com/thomluther/ha-anker-solix)-Integration; mit manuell
-eingetragenen Entitäten läuft sie an jeder anderen Anlage genauso.
+A Lovelace card for Home Assistant that shows the energy flow of a household as one
+picture: a house with PV modules on the roof, solar banks on the wall, house
+connection and garage with a wall charger, with animated flow lines. House and
+devices are pictures (day and night, car in the garage or out), everything that
+carries a state is a vector drawn on top.
 
-**Du wählst ein Gerät, den Rest findet die Karte selbst.** Zeig auf ein
-`anker_solix`-System und sie liest alle Sensoren aus der Entity-Registry — auch die
-von Hardware, die später dazukommt, etwa eine zweite Solarbank oder ein Power Dock.
+Built for balcony power plants with storage, especially **Anker SOLIX** through the
+[anker_solix](https://github.com/thomluther/ha-anker-solix) integration. With
+manually entered entities it runs on any other setup just the same.
 
-**Alle Systeme in einem Bild.** Die App zeigt immer nur ein System, weil sie muss.
-Hier steht ein Haus für den ganzen Haushalt: jede Solarbank bekommt ihren eigenen
-Block aus vier Modulen auf dem Dach — einen je MPPT-Eingang — und darunter ihren
-eigenen Speicher mit Ladestand auf der Scheibe. Die Blöcke stehen **immer nebeneinander**, und jeder
-Speicher steht genau unter seinem Block — damit ist jedes Kabel ein senkrechter
-Strich in die richtige Batterie, ohne Kreuzungen und ohne Nachdenken. Jedes Modul wird je nach Leistung seines Eingangs heller oder dunkler (volle Sonne ab
-`panel_peak`, Standard 400 W), ein verschatteter oder abgeklemmter String fällt also
-sofort auf. Kommt ein **Power
-Dock** dazu, verschmelzen die Speicher zu einem Gerät und die Ladestände wandern
-als Reihe darüber.
+**You pick a device, the card finds the rest.** Point it at an `anker_solix` system
+and it reads all sensors from the entity registry, including those of hardware that
+arrives later, such as a second solar bank or a Power Dock.
 
-Wer keine Anker-Integration nutzt, trägt die Entitäten von Hand ein: die Karte ist
-darunter vollständig entity-agnostisch und läuft genauso mit Shelly, Tibber, MQTT
-oder Template-Sensoren.
+**All systems in one picture.** The app shows one system at a time because it has
+to. Here one house stands for the whole household: every solar bank gets its own
+block of four modules on the roof (one per MPPT input) and its own storage below
+with the state of charge on the disc. The blocks always stand **side by side**, and
+every storage stands right below its block, so every cable is a vertical line into
+the right battery, without crossings and without thinking. Each module gets lighter
+or darker with the power of its input (fully sunlit from `panel_peak`, default
+400 W), so a shaded or disconnected string is noticed at once. If a **Power Dock**
+joins, the storages merge into one device and the charge levels move to a row above it.
 
-![Vorschau hell und dunkel](docs/preview.png)
+If you do not use the Anker integration, enter the entities by hand: the card is
+entirely entity agnostic then and works the same with Shelly, Tibber, MQTT or
+template sensors.
+
+![Preview light and dark](docs/preview.png)
 
 ---
 
 ## Installation
 
-### HACS (empfohlen)
+### HACS (recommended)
 
 1. HACS → **Frontend** → ⋮ → **Custom repositories**
-2. Repository: `https://github.com/dirknoelke/sonnendeck-card`, Kategorie: **Lovelace**
-3. „Sonnendeck" installieren
-4. Home Assistant neu laden (Strg+F5), dann die Karte über **Karte hinzufügen** suchen
+2. Repository: `https://github.com/dirknoelke/sonnendeck-card`, category: **Lovelace**
+3. Install "Sonnendeck"
+4. Reload Home Assistant (Ctrl+F5), then search for the card under **Add card**
 
-### Manuell
+### Manual
 
-`dist/sonnendeck-card.js` nach `config/www/` kopieren und als Ressource eintragen
-(Einstellungen → Dashboards → ⋮ → Ressourcen, erweiterter Modus muss an sein):
+Copy `dist/sonnendeck-card.js` to `config/www/` and add it as a resource
+(Settings → Dashboards → ⋮ → Resources, advanced mode must be on):
 
 ```yaml
 url: /local/sonnendeck-card.js?v=0.10.0
 type: module
 ```
 
-Die Versionsnummer in der URL bei jedem Update hochzählen — sonst hält der Browser
-die alte Datei fest.
+Raise the version number in the URL with every update, otherwise the browser keeps
+the old file.
 
-### Umstieg von `anker-solix-flow-card`
+### Moving from `anker-solix-flow-card`
 
-Bis 0.7.4 hieß die Karte `anker-solix-flow-card`. Der alte Elementname bleibt
-registriert, bestehende Dashboards laufen also unverändert weiter — nur die
-Ressource muss auf `sonnendeck-card.js` zeigen. Wer aufräumen mag, ersetzt in
-seinem YAML `type: custom:anker-solix-flow-card` durch `type: custom:sonnendeck-card`.
+Up to 0.7.4 the card was called `anker-solix-flow-card`. The old element name stays
+registered, so existing dashboards keep working, but the resource has to point to
+`sonnendeck-card.js`. An old resource entry such as
+`/local/anker-solix-flow-card.js` must be removed, otherwise it registers the old
+name first and hides the new card. To tidy up, replace
+`type: custom:anker-solix-flow-card` with `type: custom:sonnendeck-card` in your YAML.
 
 ---
 
-## Konfiguration
+## Configuration
 
-Im Regelfall reicht das hier — beim Anlegen über die UI trägt die Karte alle
-gefundenen Systeme sogar selbst ein:
+This is usually enough. When you add the card through the UI, it even enters all
+systems it finds by itself:
 
 ```yaml
-type: custom:anker-solix-flow-card
+type: custom:sonnendeck-card
 systems:
-  - device: 8d1f0c3a9b7e4d52a1c6f0b3e7d94a15   # Mini-PV Dach
-  - device: 2c7b48e6d0fa4913b85e1c7d6a03f942   # Mini-PV Garten
+  - device: 8d1f0c3a9b7e4d52a1c6f0b3e7d94a15   # Mini-PV roof
+  - device: 2c7b48e6d0fa4913b85e1c7d6a03f942   # Mini-PV garden
 ```
 
-### Optionen
+### Options
 
-| Option           | Typ      | Standard | Beschreibung |
-|------------------|----------|----------|--------------|
-| `systems`        | Liste    | –        | Ein Eintrag je Anker-System, siehe unten |
-| `title`          | string   | –        | Optionale Überschrift über der Grafik |
-| `dock`           | string   | –        | Geräte-ID des Power Docks. Gesetzt heißt: ein Speicher statt vier |
-| `house`          | map      | –        | Hauszähler, siehe unten. Gewinnt gegen die Werte aus den Systemen |
-| `wallbox`        | map      | –        | Wandladestation, siehe unten. Gesetzt heißt: Garage mit Wallbox, das Auto steht drin, solange es lädt |
-| `panel_peak`     | number   | `400`    | Leistung eines Eingangs in W, ab der sein Modul voll sonnig gezeichnet wird |
-| `house.load`     | string   | –        | Optional. Ohne Angabe wird die Hauslast aus der Bilanz berechnet |
-| `combine`        | map      | –        | `grid` und `home`: `primary` (Standard) oder `sum`, siehe unten |
-| `storage_display`| string   | `auto`   | `units` je System ein Speicher, `combined` einer für alle, `auto` schaltet um sobald ein Power Dock da ist |
-| `invert_grid`    | boolean  | `false`  | Vorzeichen des Netz-Sensors drehen |
-| `invert_battery` | boolean  | `false`  | Vorzeichen des Batterie-Sensors drehen |
-| `animation`      | boolean  | `true`   | Laufende Punkte auf den Flusslinien |
-| `show_badge`     | boolean  | `true`   | Leistungs-Pille auf der Leitung Speicher → Haus |
-| `kw_threshold`   | number   | `0`      | Ab diesem Wert in W wird auf kW umgestellt (`0` = immer W) |
-| `dark_mode`      | string   | `auto`   | `auto` (folgt dem HA-Theme), `light`, `dark` |
-| `scene`          | string   | `auto`   | Bild des Hauses: `auto` (Tag, solange `sun.sun` über dem Horizont steht; ohne die Entität nach dem Theme), `day`, `night`. Die Kartenfarben folgen weiter `dark_mode` |
-| `corners`        | map      | –        | Eigene `tap_action` je Eckwert (`solar`, `grid`, `storage`, `home`), siehe Eckwerte |
-| `labels`         | map      | –        | Überschreibt `solar`, `grid`, `home` |
+| Option           | Type     | Default  | Description |
+|------------------|----------|----------|-------------|
+| `systems`        | list     | –        | One entry per Anker system, see below |
+| `title`          | string   | –        | Optional heading above the picture |
+| `dock`           | string   | –        | Device ID of the Power Dock. Set means: one storage instead of four |
+| `house`          | map      | –        | House meter, see below. Wins over the values from the systems |
+| `wallbox`        | map      | –        | Wall charger, see below. Set means: garage with wall charger, the car is inside while it charges |
+| `panel_peak`     | number   | `400`    | Power of one input in W from which its module is drawn fully sunlit |
+| `house.load`     | string   | –        | Optional. Without it the house load is calculated from the balance |
+| `combine`        | map      | –        | `grid` and `home`: `primary` (default) or `sum`, see below |
+| `storage_display`| string   | `auto`   | `units` one storage per system, `combined` one for all, `auto` switches as soon as a Power Dock exists |
+| `invert_grid`    | boolean  | `false`  | Flip the sign of the grid sensor |
+| `invert_battery` | boolean  | `false`  | Flip the sign of the battery sensor |
+| `animation`      | boolean  | `true`   | Running dots on the flow lines |
+| `kw_threshold`   | number   | `0`      | From this value in W on, switch to kW (`0` = always W) |
+| `dark_mode`      | string   | `auto`   | `auto` (follows the HA theme), `light`, `dark` |
+| `scene`          | string   | `auto`   | Picture of the house: `auto` (day while `sun.sun` is above the horizon; without that entity it follows the theme), `day`, `night`. The card colours still follow `dark_mode` |
+| `corners`        | map      | –        | Own `tap_action` per corner readout (`solar`, `grid`, `storage`, `home`), see corner readouts |
+| `labels`         | map      | –        | Overrides `solar`, `grid`, `home` |
 
-### Ein System
+### One system
 
-| Feld          | Beschreibung |
-|---------------|--------------|
-| `device`      | Geräte-ID des Anker-**Systems**. Eine Solarbank geht auch — die Karte klettert dann eine Ebene hoch zum System. |
-| `name`        | Fallback-Beschriftung, wenn kein Gerätename gefunden wird |
-| `device_name` | Beschriftung unter dem Speicher. Standard: der Name der Solarbank bzw. des Power Docks |
-| `entities`    | Manuelle Overrides, gewinnen gegen alles Gefundene |
+| Field         | Description |
+|---------------|-------------|
+| `device`      | Device ID of the Anker **system**. A solar bank works as well, the card then climbs one level up to the system. |
+| `name`        | Fallback label if no device name is found |
+| `device_name` | Label below the storage. Default: the name of the solar bank or Power Dock |
+| `entities`    | Manual overrides, they win over everything found |
 
 ---
 
-## Wie die Erkennung funktioniert
+## How detection works
 
-Die Karte liest die Entity-Registry und ordnet Sensoren über ihren
-`translation_key` zu — der ist sprachunabhängig, anders als Entity-IDs. Berücksichtigt
-werden das gewählte Gerät **und alle Geräte, die über es angebunden sind**. Genau
-deshalb erscheint eine zweite Solarbank oder ein nachgerüstetes Power Dock ohne
-Änderung an der Konfiguration.
+The card reads the entity registry and assigns sensors through their
+`translation_key`, which does not depend on the language, unlike entity IDs. It
+considers the chosen device **and all devices connected through it**. That is exactly
+why a second solar bank or a retrofitted Power Dock appears without any change to
+the configuration.
 
-| Rolle             | `translation_key`, in dieser Reihenfolge |
-|-------------------|------------------------------------------|
-| PV gesamt         | `solar_power_total`, `solarbank_input_power`, `input_power` |
+| Role              | `translation_key`, in this order |
+|-------------------|----------------------------------|
+| PV total          | `solar_power_total`, `solarbank_input_power`, `input_power` |
 | PV 1–4            | `solar_power_1` … `solar_power_4` |
-| Netz              | `grid_power_signed` |
-| Hauslast          | `home_load_power`, `ac_to_home_load` |
-| Ladestand         | `solarbank_state_of_charge`, `state_of_charge_total`, `state_of_charge` |
-| Batterieleistung  | `solarbank_battery_power_signed`, `battery_power_signed_total`, `battery_power_signed` |
-| Ausgang           | `solarbank_output_power`, `ac_output_power_total`, `output_power_total`, `ac_output_power` |
-| PV → Haus         | `pv_to_home_power` |
-| PV → Speicher     | `pv_to_battery_power` |
-| Speicher → Haus   | `battery_to_home_power` |
-| Netz → Speicher   | `grid_to_battery_power` |
-| Netz → Haus       | `grid_to_home_power` |
-| Einspeisung       | `photovoltaic_to_grid_power` |
+| Grid              | `grid_power_signed` |
+| House load        | `home_load_power`, `ac_to_home_load` |
+| State of charge   | `solarbank_state_of_charge`, `state_of_charge_total`, `state_of_charge` |
+| Battery power     | `solarbank_battery_power_signed`, `battery_power_signed_total`, `battery_power_signed` |
+| Output            | `solarbank_output_power`, `ac_output_power_total`, `output_power_total`, `ac_output_power` |
+| PV → house        | `pv_to_home_power` |
+| PV → storage      | `pv_to_battery_power` |
+| Storage → house   | `battery_to_home_power` |
+| Grid → storage    | `grid_to_battery_power` |
+| Grid → house      | `grid_to_home_power` |
+| Feed-in           | `photovoltaic_to_grid_power` |
 
-Findet die Karte keinen Treffer, fällt sie auf ein Muster im Entity-ID zurück
-(`home_load_power`, `state_of_charge`, `grid_power` und so weiter). Für alles andere
-gibt es die manuellen Overrides.
+If the card finds no match, it falls back to a pattern in the entity ID
+(`home_load_power`, `state_of_charge`, `grid_power` and so on). For everything else
+there are the manual overrides.
 
-### Hauszähler
+### House meter
 
-Der Zähler gehört zum Haus, nicht zu einer Solarbank. Wer einen eigenen hat —
-Tasmota mit SML-Lesekopf, Shelly 3EM, ein Template-Sensor — trägt ihn einmal
-zentral ein:
-
-```yaml
-house:
-  grid_import: sensor.tasmota_sml_in    # Bezug in W
-  grid_export: sensor.tasmota_sml_out   # Einspeisung in W
-```
-
-Alternativ ein einzelner vorzeichenbehafteter Sensor:
+The meter belongs to the house, not to a solar bank. If you have your own (Tasmota
+with an SML reading head, Shelly 3EM, a template sensor), enter it once, centrally:
 
 ```yaml
 house:
-  grid: sensor.shelly_3em_total_power   # + Bezug / − Einspeisung
+  grid_import: sensor.tasmota_sml_in    # import in W
+  grid_export: sensor.tasmota_sml_out   # export in W
 ```
 
-Wichtig: **Momentanleistung in Watt**, nicht der kWh-Zählerstand. Ein SML-Lesekopf
-liefert oft beides — für die Karte ist der Leistungswert (OBIS 16.7.0) der richtige,
-nicht die Zählwerke 1.8.0 und 2.8.0. Erkennt die Karte eine Energieeinheit
-(`Wh`, `kWh`, `MWh`), verwirft sie den Wert und sagt es unter der Grafik, statt eine
-plausible Zahl anzuzeigen, die keine ist. `kW` wird automatisch umgerechnet.
+Or a single signed sensor:
 
-### Die Hauslast wird gerechnet, nicht gemessen
-
-Ein Hausanschluss misst nur, was über die Grenze geht. Was im Haus verbraucht wird,
-ist eine Bilanz:
-
-```
-Hauslast = was die Solarbanks ins Hausnetz abgeben  +  Netzbezug  −  Einspeisung
+```yaml
+house:
+  grid: sensor.shelly_3em_total_power   # + import / − export
 ```
 
-Deshalb ist die Hauslast regelmäßig **größer als der Netzbezug** — der Teil, den die
-Speicher liefern, läuft nie über den Zähler. An einem Zählpunkt schließen sich Bezug
-und Einspeisung gegenseitig aus, es trägt also immer nur einer der beiden Terme bei.
+Important: **instantaneous power in watts**, not the kWh meter reading. An SML
+reading head often delivers both, and the power value (OBIS 16.7.0) is the right one
+for the card, not the counters 1.8.0 and 2.8.0. If the card recognises an energy
+unit (`Wh`, `kWh`, `MWh`), it discards the value and says so below the picture
+instead of showing a plausible number that is none. `kW` is converted automatically.
 
-Die Karte rechnet das selbst, sobald ein Hauszähler konfiguriert ist. `house.load`
-ist nur für den Fall da, dass du einen echten Verbrauchssensor hast — dann gewinnt
-der.
+### The house load is calculated, not measured
 
-### Wallbox und Auto
+A house connection only measures what crosses the boundary. What is consumed inside
+the house is a balance:
 
-Ist eine Wandladestation konfiguriert, kommen Stellplatz, Fahrzeug und Ladesäule
-rechts ins Bild, mit einer Leitung vom Zählerkasten dorthin. Die Karte wird dafür
-breiter; ohne Wallbox bleibt die Szene unverändert.
+```
+House load = what the solar banks feed into the house grid  +  grid import  −  export
+```
+
+That is why the house load is regularly **larger than the grid import**: the part
+the storages supply never passes the meter. At one metering point import and export
+exclude each other, so only one of the two terms ever contributes.
+
+The card calculates this itself as soon as a house meter is configured. `house.load`
+only exists for the case that you have a real consumption sensor; it wins then.
+
+### Wall charger and car
+
+If a wall charger is configured, the parking bay, vehicle and charging post appear
+on the right, with a line from the meter box to it. The card gets wider for that;
+without a wall charger the scene stays unchanged.
 
 ```yaml
 wallbox:
   device: 7a2e5c91b3d84f06a2e9c1b7d4f83a52   # V1 Smart EV Charger
 ```
 
-Das Gerät genügt — Ladeleistung und Status werden daraus gelesen. Alternativ von
-Hand, wobei die drei Phasen addiert werden:
+The device is enough: charging power and status are read from it. Alternatively by
+hand, with the three phases added up:
 
 ```yaml
 wallbox:
@@ -202,91 +202,95 @@ wallbox:
   status: sensor.wallbox_status
 ```
 
-Die Ladeleistung erscheint als Pille über dem Auto, ab 1 kW in Kilowatt — eine
-Wallbox in Watt zu lesen hilft niemandem.
+A single power sensor works too, for example from a Shelly on the charger's circuit:
 
-#### Woran die Wallbox hängt
-
-| Feld     | Standard | Bedeutung |
-|----------|----------|-----------|
-| `source` | `dock`, sobald ein Power Dock eingetragen ist, sonst `house` | `dock`: die Leitung zweigt von der AC-Schiene ab, weil das Dock einen eigenen Anschluss für die Wallbox hat. `house`: sie geht vom Zählerkasten weg wie ein normaler Hausstromkreis |
-
-Mit Dock kommt also alles aus einem System: die Module laden die Speicher, das Dock
-versorgt Haus und Auto aus derselben Schiene.
-
-#### Das Auto zählt nicht zur Hauslast
-
-Der Wagen hängt hinter dem Zähler, also taucht er in der Bilanz auf — egal ob er am
-Dock oder an einem Hausstromkreis lädt. Damit „Hauslast" den Haushalt meint und
-nicht Haushalt plus Auto, wird die Ladeleistung wieder abgezogen:
-
-```
-Hauslast = Σ AC-Ausgang + Netzbezug − Einspeisung − Ladeleistung
+```yaml
+wallbox:
+  power: sensor.shelly_wallbox_power    # W, not the kWh counter
 ```
 
-Die Pille am Auto zeigt den Wagen, die Hauslast unten rechts den Rest. Sollte dein
-Ausgangssensor das Auto bereits nicht mitzählen, stell `in_home_load: false` —
-sonst wird doppelt abgezogen.
+The charging power appears as a pill above the car, in kilowatts from 1 kW on,
+because reading a wall charger in watts helps nobody.
 
-### Netz und Hauslast bei mehreren Systemen
+#### What the wall charger hangs on
 
-Zwei Anker-Systeme im selben Haus schauen meist auf denselben Zähler. Ihre
-Netz- und Hauslastwerte zu addieren würde also doppelt zählen. Deshalb nimmt die
-Karte beide Werte standardmäßig vom **ersten System, das einen liefert**:
+| Field    | Default | Meaning |
+|----------|---------|---------|
+| `source` | `dock` as soon as a Power Dock is set, otherwise `house` | `dock`: the line branches off the AC rail, because the dock has its own connection for the wall charger. `house`: it leaves the meter box like a normal house circuit |
+
+With a dock everything comes from one system: the modules charge the storages, the
+dock supplies house and car from the same rail.
+
+#### The car does not count as house load
+
+The car sits behind the meter, so it shows up in the balance, no matter whether it
+charges at the dock or on a house circuit. So that "house load" means the household
+and not household plus car, the charging power is subtracted again:
+
+```
+House load = Σ AC output + grid import − export − charging power
+```
+
+The pill at the car shows the car, the house load at the bottom right shows the
+rest. If your output sensor already does not count the car, set
+`in_home_load: false`, otherwise it is subtracted twice.
+
+### Grid and house load with several systems
+
+Two Anker systems in the same house usually watch the same meter. Adding up their
+grid and house load values would count twice. That is why the card takes both values
+by default from the **first system that reports one**:
 
 ```yaml
 combine:
-  grid: primary   # oder: sum
-  home: primary   # oder: sum
+  grid: primary   # or: sum
+  home: primary   # or: sum
 ```
 
-Auf `sum` stellen, wenn deine Systeme wirklich getrennte Zähler und getrennte
-Verbrauchskreise haben. Mit einem `house`-Zähler ist das ohnehin erledigt — der
-gewinnt gegen beide Varianten. PV-Erzeugung und Batterieleistung werden immer summiert,
-der Ladestand ist der Mittelwert über die Speicher.
+Switch to `sum` if your systems really have separate meters and separate consumer
+circuits. With a `house` meter this is settled anyway, since it wins over both
+variants. PV generation and battery power are always summed, the state of charge is
+the mean over the storages.
 
-### Die vier Eckwerte
+### The four corner readouts
 
-| Ecke | Wert |
-|------|------|
-| Solarbetrieb | Summe der PV-Eingänge aller Systeme |
-| Netz | Betrag am Zählpunkt; die Richtung steckt in der Flusslinie |
-| Speicher | Mittlerer Ladestand · **Betrag** der Batterieleistung |
-| Hauslast | Σ AC-Abgabe + Netzbezug − Einspeisung − Auto |
+| Corner | Value |
+|--------|-------|
+| Solar | Sum of the PV inputs of all systems |
+| Grid | Amount at the metering point; the direction is a word in the heading (`Grid · import` / `Grid · export`) and an arrow next to the value |
+| Storage | Mean state of charge · **amount** of the battery power |
+| House load | Σ AC output + grid import − export − car |
 
-Die Watt-Zahl beim Speicher ist die **Batterieleistung**, also der Fluss *in die*
-oder *aus den* Zellen — nicht die Abgabe ans Haus. Ob geladen oder entladen wird,
-steht als Wort in der Überschrift (`Speicher · lädt` / `Speicher · entlädt`) und
-im Pfeil daneben. `844 W` bei `lädt` heißt: alle Speicher zusammen nehmen gerade
-844 W auf. Was davon ins Haus geht, steht in der Hauslast.
+The watt figure at the storage is the **battery power**, the flow *into* or *out of*
+the cells, not the output to the house. Whether it charges or discharges is a word in
+the heading (`Storage · charging` / `Storage · discharging`) and the arrow next to
+it. `844 W` while charging means: all storages together take up 844 W right now.
+What part of that goes into the house shows in the house load.
 
-Antippen öffnet nur dann eine Entität, wenn es genau eine gibt. Solarbetrieb und
-Speicher sind bei mehreren Systemen Summen — dort würde ein Klick willkürlich
-System 1 öffnen. Der Weg ins Einzelsystem führt über die Ladestands-Pille am
-jeweiligen Speicher.
+Tapping opens the history of an entity if there is exactly one. With several systems,
+solar and storage are sums, so a detail sheet opens instead (see below). The way
+into a single system also leads through the charge disc on the respective storage.
 
-#### Details hinter den Summen
+#### Details behind the sums
 
-Solarbetrieb, Speicher und Hauslast sind bei mehreren Systemen Summen ohne eigene
-Entität. Antippen öffnet deshalb ein Fenster über der Karte, das zeigt, woraus
-die Zahl besteht:
+With several systems, solar, storage and house load are sums without an entity of
+their own. So tapping opens a sheet over the card that shows what the number is made of:
 
-- **Solarbetrieb**: je System die Leistung jedes Eingangs (sofern die Sensoren da sind)
-- **Speicher**: Ladestand und Batterieleistung gesamt und je System, dazu der Ausgang zum Haus
-- **Netz**: Bezug oder Einspeisung
-- **Hauslast**: die Bilanz aus Speichern, Netz und Auto
+- **Solar**: per system the power of every input (where the sensors exist)
+- **Storage**: state of charge and battery power in total and per system, plus the output to the house
+- **Grid**: import or export
+- **House load**: the balance of storages, grid and car
 
-Hat ein Eckwert genau eine Entität (z. B. das Netz über den Hauszähler), öffnet
-sich wie bisher deren Verlauf. Mit `action: details` lässt sich das Fenster auch dort
-erzwingen.
+If a corner has exactly one entity (for example the grid through the house meter),
+the history opens as before. `action: details` forces the sheet there as well.
 
-Dieselben Werte gibt es als eigene Karte, zum Einbetten in ein Pop-up oder eine
-Ansicht. Sie nimmt dieselbe Konfiguration wie die Hauptkarte (`systems`, `house`,
-`wallbox`, ...) und zusätzlich `view`:
+The same values exist as a card of their own, to embed in a pop-up or a view. It
+takes the same configuration as the main card (`systems`, `house`, `wallbox`, ...)
+plus `view`:
 
 ```yaml
 type: custom:sonnendeck-details
-view: storage          # solar, grid, storage, home oder all (Standard)
+view: storage          # solar, grid, storage, home or all (default)
 systems:
   - device: e5bb30f4a29324f9fcc37ecda58e3b19
   - device: 2178c5fcb8463c87487f063623085bc7
@@ -294,18 +298,17 @@ house:
   grid: sensor.keller_tasmota_sml_power
 ```
 
-Tagesenergien zeigt die Karte noch nicht, dafür fehlen passende Sensoren in der
-Integration.
+The card does not show daily energy yet, the integration offers no fitting sensors
+for it.
 
-#### Eigene Aktion je Eckwert
+#### Own action per corner readout
 
-Jeder Eckwert (`solar`, `grid`, `storage`, `home`) kann eine eigene Aktion bekommen,
-im gewohnten Format jeder Lovelace-Karte. Damit lässt sich zum Beispiel ein
-Pop-up öffnen, das mehr zeigt als eine einzelne Entität. Mit
-[Bubble Card](https://github.com/Clooos/Bubble-Card) ist das ein Pop-up mit
-einem Hash, den die Karte per `navigate` ansteuert. Die Karte selbst kennt Bubble
-Card nicht und braucht sie nicht, es geht mit jeder Lösung, die auf einen Hash
-oder Pfad hört.
+Every corner readout (`solar`, `grid`, `storage`, `home`) can get an action of its
+own, in the usual format of any Lovelace card. That makes it possible, for example,
+to open a pop-up that shows more than a single entity. With
+[Bubble Card](https://github.com/Clooos/Bubble-Card) this is a pop-up with a hash
+that the card targets through `navigate`. The card itself does not know Bubble Card
+and does not need it, it works with any solution that listens for a hash or path.
 
 ```yaml
 corners:
@@ -316,128 +319,129 @@ corners:
   storage:
     tap_action:
       action: navigate
-      navigation_path: "#speicher"
+      navigation_path: "#storage"
   grid:
     tap_action:
-      action: none          # nichts tun, auch nicht die Entität öffnen
+      action: none          # do nothing, not even open the entity
 ```
 
-Erlaubt sind `more-info`, `navigate`, `url`, `perform-action`, `toggle`, `details` (das eingebaute Fenster) und `none`.
-Bei `more-info` ohne eigene `entity` nimmt die Karte die Entität hinter dem Eckwert,
-sofern es genau eine gibt. Ohne Angabe bleibt das bisherige Verhalten.
+Allowed are `more-info`, `navigate`, `url`, `perform-action`, `toggle`, `details`
+(the built-in sheet) and `none`. For `more-info` without an `entity` of its own the
+card uses the entity behind the corner, if there is exactly one. Without a setting
+the previous behaviour stays.
 
-### Woraus die Flusslinien entstehen
+### What the flow lines come from
 
-Sind die Teilfluss-Sensoren da, zeigt jede Linie genau ihren Sensor — nichts wird
-geraten:
+If the partial flow sensors exist, every line shows exactly its sensor, nothing is
+guessed. The lines follow the real layout instead of a scheme:
 
-Die Leitungen folgen dem realen Aufbau statt einem Schema:
+| Line | from → to | active when |
+|------|-----------|-------------|
+| DC, per solar bank | module block → its storage | generation of this system > 10 W |
+| Stub, per storage | storage → AC rail along the house edge | inverter output of this storage outside ±10 W |
+| AC rail | row of storages → left port of the house connection | sum outside ±10 W |
+| Grid | middle port → a short piece down, disappears into the ground | grid power outside ±10 W |
+| Wall charger | right port → wall charger | charging power > 10 W |
 
-| Leitung | von → nach | aktiv bei |
-|---------|------------|-----------|
-| DC, je Solarbank | Modulblock → zugehöriger Speicher | Erzeugung dieses Systems > 10 W |
-| Stich, je Speicher | Speicher → AC-Schiene | Wechselrichter-Ausgang dieses Speichers außerhalb ±10 W |
-| AC-Schiene | Speicherreihe → Zählerkasten | Summe außerhalb ±10 W |
-| Netz | Mast → Zählerkasten | Netzleistung außerhalb ±10 W |
+The AC value of a storage is the **inverter output** (`output`, otherwise
+`pv_to_home + battery_to_home`), minus `grid_to_battery`. Taking only
+`battery_to_home` would be wrong: on a sunny day the storage charges while the
+modules supply the house directly, so the line carries power even though the battery
+gives nothing.
 
-Der AC-Wert eines Speichers ist der **Wechselrichter-Ausgang**
-(`output`, ersatzweise `pv_to_home + battery_to_home`), abzüglich `grid_to_battery`.
-Nur `battery_to_home` zu nehmen wäre falsch: an einem sonnigen Tag lädt der Speicher,
-während die Module das Haus direkt versorgen — die Leitung führt dann Strom, obwohl
-die Batterie nichts abgibt.
+Negative values reverse the direction: if a storage charges from the grid, its stub
+runs backwards; if power is fed in, the grid line runs outwards. A value at 0 W
+keeps the line grey and calm, which is not an error but the statement.
 
-Negative Werte kehren die Laufrichtung um: lädt ein Speicher aus dem Netz, läuft
-sein Stich rückwärts; wird eingespeist, läuft die Netzleitung nach außen. Steht ein
-Wert bei 0 W, bleibt die Leitung grau und ruhig — das ist kein Fehler, sondern die
-Aussage.
-
-Die Animation ist ein einzelner Puls, der die **ganze** Leitung durchläuft. Über
-`pathLength="1000"` wird jede Strecke auf dieselbe Länge normiert — kurze Stiche
-und die lange Schiene laufen dadurch im Gleichtakt, unabhängig von der Pixellänge.
+The animation is a single pulse that runs through the **whole** line. Through
+`pathLength="1000"` every segment is normalised to the same length, so short stubs
+and the long rail run in step, independent of the pixel length.
 
 ---
 
-## Manuelle Entitäten
+## Manual entities
 
-Alles unterhalb von `entities` ist optional und überschreibt die Erkennung:
+Everything below `entities` is optional and overrides detection:
 
-| Schlüssel | Einheit | Vorzeichen |
-|-----------|---------|------------|
+| Key | Unit | Sign |
+|-----|------|------|
 | `solar`, `solar_1` … `solar_4` | W | – |
-| `grid` | W | **+ Bezug / − Einspeisung** |
+| `grid` | W | **+ import / − export** |
 | `home` | W | – |
 | `battery_soc` | % | – |
-| `battery_power` | W | **+ laden / − entladen** |
-| `output` | W | + zum Haus |
-| `pv_to_home`, `pv_to_battery`, `battery_to_home`, `grid_to_battery`, `grid_to_home`, `home_to_grid` | W | + in Pfeilrichtung |
+| `battery_power` | W | **+ charging / − discharging** |
+| `output` | W | + to the house |
+| `pv_to_home`, `pv_to_battery`, `battery_to_home`, `grid_to_battery`, `grid_to_home`, `home_to_grid` | W | + in arrow direction |
 
-Stimmen die Vorzeichen deines Zählers nicht, dreh sie mit `invert_grid` bzw.
-`invert_battery` — die Karte rechnet nichts um, sie liest nur ab.
+If the signs of your meter do not match, flip them with `invert_grid` or
+`invert_battery`. The card does not convert anything, it only reads.
 
 ---
 
-## Anpassen
+## Customising
 
-Alle Farben sind CSS-Variablen auf dem Host-Element:
+All colours are CSS variables on the host element:
 
 ```yaml
 card_mod:
   style: |
     :host {
-      --ak-roof-1: #7a5c46;
-      --ak-roof-2: #5d4433;
+      --ak-sky-1: #e9d9c4;
+      --ak-sky-2: #f4e8d8;
       --ak-flow: #f2a33c;
       --ak-accent: #f2a33c;
     }
 ```
 
-Die wichtigsten: `--ak-sky-1..4`, `--ak-roof-1/2`, `--ak-panel-1/2`, `--ak-wall-1/2`,
-`--ak-flow`, `--ak-flow-idle`, `--ak-accent`, `--ak-text`, `--ak-muted`,
-`--ak-badge-bg`, `--ak-badge-fg`.
+The most important: `--ak-sky-1..4`, `--ak-ground-1/2`, `--ak-shadow`, `--ak-flow`,
+`--ak-flow-idle`, `--ak-accent`, `--ak-text`, `--ak-muted`, `--ak-guide`,
+`--ak-chip-bg`, `--ak-chip-fg`. House and devices are pictures and cannot be
+recoloured, see Pictures below.
 
 ---
 
-## Entwicklung
+## Development
 
-Die Karte kommt **ohne Laufzeit-Abhängigkeiten** aus — kein Lit, kein Bundler.
-Home Assistant lädt genau eine Datei.
+The card needs **no runtime dependencies**: no Lit, no bundler. Home Assistant loads
+exactly one file.
 
 ```bash
-npm install     # nur TypeScript
+npm install     # TypeScript only
 npm run build   # src/*.ts  ->  dist/sonnendeck-card.js
 npm run watch
 ```
 
-Die Grafik ist **konstruiert, nicht nachgezeichnet**. Alle Punkte laufen durch
-dieselbe isometrische Projektion:
+The scene consists of **pictures with a vector overlay**. House (day and night,
+garage closed or with car), solar bank, house connection, wall charger, Power Dock
+and two module pictures (dark and sunlit) live in `art/`. On top lie the cables,
+values, charge discs and the flow animation as SVG. The geometry for that is in
+`src/sonnendeck-card.ts`:
 
-```
-screen = O + x·(1, K) + y·(−1, K) + h·(0, −1)
-```
+- `PLACE` puts the house picture into the 960×1040 canvas, `at(x, y)` converts picture points.
+- `ROOF` is the quad of the roof plane. Every module is a picture placed on a slot in
+  the grid by an affine matrix, the sun layer fades in through `--sun` (power of the
+  input divided by `panel_peak`).
+- Devices hang on the wall along the foot line `baseY(x)`. Bank spacing, house
+  connection and wall charger are set in `slotPitch`, `CONN_X`, `wallboxBox()`.
 
-`+x` läuft nach rechts unten (Firstrichtung), `+y` nach links unten (Gefällerichtung),
-`+h` nach oben, `K = 0.28` ist die Abflachung. Dadurch ist der First per Konstruktion
-parallel zur Traufe, die Dachfläche lässt sich lückenlos mit Modulen kacheln, und
-alles steht auf einer gemeinsamen Grundebene bei `h = 0` — mit Kontaktschatten,
-damit nichts schwebt. Die abgewandte Dachfläche wird gar nicht erst gezeichnet: bei
-dieser Kamera ist sie nicht sichtbar.
+The preview for trying things out is `proto/preview.html` (open it with a local HTTP
+server). Parameters: `?n=1..4` (systems), `?dock`, `?noev`, `?idle`, `?dark`,
+`?sun=above_horizon|below_horizon`, `?export`, `?nogrid`,
+`?sheet=solar|grid|storage|home`, `?details=all`.
 
-Hausmaße, Modulraster und die Speicherreihe stecken in `HOUSE`, `UNIT` und
-`panelMarkup()` — dort ändern, nicht in einzelnen Pfaden.
+## License
 
-## Lizenz
+MIT, see [LICENSE](LICENSE).
 
-MIT — siehe [LICENSE](LICENSE).
+**Sonnendeck is an independent project.** It has no connection to Anker Innovations
+and is neither operated, supported nor reviewed by them. "Anker" and "SOLIX" are
+trademarks of Anker Innovations and are named here only to describe which hardware
+the card works with.
 
-**Sonnendeck ist ein unabhängiges Projekt.** Es steht in keiner Verbindung zu
-Anker Innovations und wird von dort weder betrieben noch unterstützt oder geprüft.
-„Anker" und „SOLIX" sind Marken von Anker Innovations und werden hier ausschließlich
-genannt, um zu beschreiben, mit welcher Hardware die Karte zusammenarbeitet.
+## Pictures
 
-## Bilder
-
-Haus und Geräte liegen als WebP in `art/` und werden mit `npm run art` in
-`src/art.ts` eingebettet, damit die Karte eine einzige Datei bleibt (`npm run build`
-fügt beides zusammen). Ein Bild tauschen: Datei in `art/` ersetzen, `npm run art`,
-`npm run build`. Die vier Hausbilder müssen denselben Ausschnitt haben, die zwei
-Modulbilder (dunkel und sonnig) ebenfalls.
+House and devices are WebP files in `art/` and get embedded into `src/art.ts` by
+`npm run art`, so that the card stays a single file (`npm run build` puts both
+together). To swap a picture: replace the file in `art/`, run `npm run art`, then
+`npm run build`. The four house pictures must have the same crop, and so must the two
+module pictures (dark and sunlit).
