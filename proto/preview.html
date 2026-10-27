@@ -63,5 +63,13 @@ card.hass = {
   locale: { language: 'de' },
   themes: { darkMode: p.has('dark') },
 };
+if (p.has('sheet')) card.openDetails(p.get('sheet'));
+if (p.has('details')) {
+  const d = document.createElement('sonnendeck-details');
+  d.style.cssText = 'display:block;max-width:460px;margin:16px';
+  d.setConfig({ ...card._config, view: p.get('details') || 'all' });
+  d.hass = card.hass;
+  document.querySelector('.wrap').after(d);
+}
 </script>
 </body></html>
