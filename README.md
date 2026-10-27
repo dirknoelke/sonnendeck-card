@@ -48,7 +48,7 @@ oder Template-Sensoren.
 (Einstellungen → Dashboards → ⋮ → Ressourcen, erweiterter Modus muss an sein):
 
 ```yaml
-url: /local/sonnendeck-card.js?v=0.9.0
+url: /local/sonnendeck-card.js?v=0.9.1
 type: module
 ```
 
@@ -95,6 +95,7 @@ systems:
 | `show_badge`     | boolean  | `true`   | Leistungs-Pille auf der Leitung Speicher → Haus |
 | `kw_threshold`   | number   | `0`      | Ab diesem Wert in W wird auf kW umgestellt (`0` = immer W) |
 | `dark_mode`      | string   | `auto`   | `auto` (folgt dem HA-Theme), `light`, `dark` |
+| `scene`          | string   | `auto`   | Bild des Hauses: `auto` (Tag, solange `sun.sun` über dem Horizont steht; ohne die Entität nach dem Theme), `day`, `night`. Die Kartenfarben folgen weiter `dark_mode` |
 | `labels`         | map      | –        | Überschreibt `solar`, `grid`, `home` |
 
 ### Ein System

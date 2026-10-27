@@ -46,6 +46,7 @@ const systems = names.slice(0, n).map((name, i) => {
     output: `sensor.${k}_out` } };
 });
 if (p.has('idle')) states['sensor.wallbox'] = num(0);
+if (p.has('sun')) states['sun.sun'] = { state: p.get('sun'), attributes: {} };
 card.setConfig({
   type: 'custom:sonnendeck-card',
   title: 'Solaranlagen',
