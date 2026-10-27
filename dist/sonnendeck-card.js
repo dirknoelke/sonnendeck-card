@@ -43,7 +43,7 @@ const EDITOR_NAME = 'sonnendeck-card-editor';
 const SUN = 'sun.sun';
 const DETAILS_NAME = 'sonnendeck-details';
 const LEGACY_NAME = 'anker-solix-flow-card';
-const CARD_VERSION = '0.10.0';
+const CARD_VERSION = '0.10.1';
 /** noise floor in W below which a flow counts as idle */
 const EPS = 10;
 /**
@@ -2135,14 +2135,14 @@ w.customCards.push({
     name: 'Sonnendeck',
     description: 'Generation, storage, house load and wall charger of a household in one picture',
     preview: true,
-    documentationURL: 'https://github.com/dirknoelke/sonnendeck-card',
+    documentationURL: 'https://github.com/nullpointer-ruhr/sonnendeck-card',
 });
 w.customCards.push({
     type: DETAILS_NAME,
     name: 'Sonnendeck Details',
     description: 'The values behind solar, storage, grid and house load, e.g. for a pop-up',
     preview: false,
-    documentationURL: 'https://github.com/dirknoelke/sonnendeck-card',
+    documentationURL: 'https://github.com/nullpointer-ruhr/sonnendeck-card',
 });
 // eslint-disable-next-line no-console
 console.info(`%c SONNENDECK %c ${CARD_VERSION} `, 'color:#fff;background:#4b5f80;font-weight:700;border-radius:3px 0 0 3px', 'color:#4b5f80;background:#e3edfa;font-weight:700;border-radius:0 3px 3px 0');

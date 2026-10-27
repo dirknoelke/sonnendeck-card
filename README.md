@@ -39,7 +39,7 @@ template sensors.
 ### HACS (recommended)
 
 1. HACS → **Frontend** → ⋮ → **Custom repositories**
-2. Repository: `https://github.com/dirknoelke/sonnendeck-card`, category: **Lovelace**
+2. Repository: `https://github.com/nullpointer-ruhr/sonnendeck-card`, category: **Lovelace**
 3. Install "Sonnendeck"
 4. Reload Home Assistant (Ctrl+F5), then search for the card under **Add card**
 
@@ -49,7 +49,7 @@ Copy `dist/sonnendeck-card.js` to `config/www/` and add it as a resource
 (Settings → Dashboards → ⋮ → Resources, advanced mode must be on):
 
 ```yaml
-url: /local/sonnendeck-card.js?v=0.10.0
+url: /local/sonnendeck-card.js?v=0.10.1
 type: module
 ```
 
